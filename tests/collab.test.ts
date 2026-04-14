@@ -86,6 +86,21 @@ describe('threaded comments', () => {
     w.undo();
     expect(w.comments.get(c.id)).toBeDefined();
   });
+
+  it('undo of removeCommentReply restores the reply at its original position', () => {
+    const w = Workbook.createDefault();
+    const sid = w.sheets[0]!.id;
+    const c = w.addComment(sid, { row: 0, col: 0 }, { author: 'A', text: 'Root' });
+    const r1 = w.replyToComment(c.id, { author: 'B', text: 'one' });
+    const r2 = w.replyToComment(c.id, { author: 'C', text: 'two' });
+    const r3 = w.replyToComment(c.id, { author: 'D', text: 'three' });
+    // Remove the middle reply.
+    w.removeCommentReply(c.id, r2.id);
+    expect(w.comments.get(c.id)!.replies.map((r) => r.id)).toEqual([r1.id, r3.id]);
+    w.undo();
+    // Should be restored at index 1 (between r1 and r3) — not appended.
+    expect(w.comments.get(c.id)!.replies.map((r) => r.id)).toEqual([r1.id, r2.id, r3.id]);
+  });
 });
 
 describe('HTML export', () => {

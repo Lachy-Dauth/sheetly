@@ -726,7 +726,17 @@ export class Workbook {
       }
       case 'addCommentReply': {
         const c = this.comments.get(cmd.commentId);
-        if (c) c.replies.push(cmd.reply);
+        if (c) {
+          if (
+            typeof cmd.index === 'number' &&
+            cmd.index >= 0 &&
+            cmd.index <= c.replies.length
+          ) {
+            c.replies.splice(cmd.index, 0, cmd.reply);
+          } else {
+            c.replies.push(cmd.reply);
+          }
+        }
         return cmd;
       }
       case 'removeCommentReply': {
@@ -877,7 +887,12 @@ export class Workbook {
         return { kind: 'removeCommentReply', commentId: cmd.commentId, replyId: cmd.reply.id };
       case 'removeCommentReply':
         return cmd.snapshot
-          ? { kind: 'addCommentReply', commentId: cmd.commentId, reply: cmd.snapshot }
+          ? {
+              kind: 'addCommentReply',
+              commentId: cmd.commentId,
+              reply: cmd.snapshot,
+              index: cmd.index,
+            }
           : { kind: 'composite', label: 'no-op', children: [] };
       case 'setProtection':
         return { kind: 'setProtection', sheetId: cmd.sheetId, protection: cmd.prev };

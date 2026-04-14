@@ -290,6 +290,8 @@ export interface AddCommentReplyCmd {
   kind: 'addCommentReply';
   commentId: string;
   reply: CommentReply;
+  /** Optional insertion index; appended at the end when omitted. */
+  index?: number;
 }
 
 export interface RemoveCommentReplyCmd {
