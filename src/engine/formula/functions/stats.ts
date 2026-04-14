@@ -208,7 +208,10 @@ export function installStats(): void {
     // omitted, the fitted values at known_x are returned. Spills as a 1-D
     // column so single-cell callers still see the first prediction.
     const ys = flattenNumbers([args[0]!]).nums;
-    const xsRaw = args.length > 1 ? flattenNumbers([args[1]!]).nums : ys.map((_, i) => i + 1);
+    const xsRaw =
+      args.length > 1 && args[1] !== null && args[1] !== undefined
+        ? flattenNumbers([args[1]!]).nums
+        : ys.map((_, i) => i + 1);
     const len = Math.min(ys.length, xsRaw.length);
     if (len < 2) return makeError('#DIV/0!');
     const xs = xsRaw.slice(0, len);
@@ -224,8 +227,22 @@ export function installStats(): void {
     if (den === 0) return makeError('#DIV/0!');
     const slope = num / den;
     const intercept = my - slope * mx;
-    const target = args.length > 2 ? flattenNumbers([args[2]!]).nums : xs;
-    const out: number[][] = target.map((x) => [intercept + slope * x]);
+    const predict = (x: number) => intercept + slope * x;
+    if (args.length > 2 && args[2] !== null && args[2] !== undefined) {
+      const newX = args[2]!;
+      if (Array.isArray(newX)) {
+        return newX.map((row) =>
+          row.map((v) => {
+            const n = typeof v === 'number' ? v : Number(v);
+            return Number.isFinite(n) ? predict(n) : null;
+          }),
+        );
+      }
+      const v = asNumber(newX);
+      if (typeof v !== 'number') return v;
+      return predict(v);
+    }
+    const out: number[][] = xs.map((x) => [predict(x)]);
     if (out.length === 0) return makeError('#N/A');
     if (out.length === 1) return out[0]![0]!;
     return out;
