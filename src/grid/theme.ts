@@ -8,6 +8,7 @@ import type { Sheet } from '../engine/sheet';
 import type { Workbook } from '../engine/workbook';
 import type { VisibleRange, ViewportRect } from './layout';
 import type { Selection } from './selection';
+import type { RangeAddress } from '../engine/address';
 
 export interface Theme {
   bg: string;
@@ -82,4 +83,8 @@ export interface DrawCtx {
   selection: Selection;
   theme: Theme;
   dpr: number;
+  /** Dashed outline for the active fill-handle drag preview. */
+  fillPreview?: RangeAddress;
+  /** Dashed outline for the cells the user is dragging into a formula editor. */
+  refPick?: RangeAddress;
 }
