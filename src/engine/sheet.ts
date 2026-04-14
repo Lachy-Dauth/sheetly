@@ -6,6 +6,7 @@ import type { Address, RangeAddress } from './address';
 import { cellKey, fromCellKey, normalizeRange } from './address';
 import type { Cell } from './cell';
 import type { ConditionalRule } from './conditional';
+import type { Validation } from './validation';
 
 export const DEFAULT_COL_WIDTH = 96;
 export const DEFAULT_ROW_HEIGHT = 22;
@@ -44,6 +45,7 @@ export class Sheet {
   freeze: SheetFreeze = { rows: 0, cols: 0 };
   merges: MergedRange[] = [];
   conditionalRules: ConditionalRule[] = [];
+  validations: Validation[] = [];
   /** Approx max used row/col, for navigation limits. */
   maxRow = 0;
   maxCol = 0;

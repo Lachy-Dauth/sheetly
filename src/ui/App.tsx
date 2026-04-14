@@ -4,6 +4,7 @@ import { Grid } from '../grid/Grid';
 import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import { SheetTabs } from './SheetTabs';
+import { FindReplace } from './FindReplace';
 import { importCsv } from '../io/csv';
 import type { Address, RangeAddress } from '../engine/address';
 import type { ThemeId } from '../grid/theme';
@@ -18,6 +19,7 @@ export function App() {
   });
   const [themeId, setThemeId] = useState<ThemeId>('light');
   const [paintStyleId, setPaintStyleId] = useState<number | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
   const [, forceRender] = useState(0);
   const rerender = () => forceRender((n) => n + 1);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -28,6 +30,18 @@ export function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', themeId);
   }, [themeId]);
+
+  // Ctrl+F opens find/replace.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setFindOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const sheet = workbook.getSheet(activeSheetId);
 
@@ -48,6 +62,7 @@ export function App() {
         painterActive={paintStyleId !== null}
         onStartPainter={setPaintStyleId}
         onImport={() => fileRef.current?.click()}
+        onFind={() => setFindOpen(true)}
       />
       <FormulaBar workbook={workbook} sheet={sheet} selection={selection} />
       <Grid
@@ -77,6 +92,7 @@ export function App() {
           e.target.value = '';
         }}
       />
+      {findOpen ? <FindReplace workbook={workbook} sheet={sheet} onClose={() => setFindOpen(false)} /> : null}
     </div>
   );
 }

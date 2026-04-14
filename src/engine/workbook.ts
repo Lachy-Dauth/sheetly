@@ -16,6 +16,8 @@ import type { Table, ColumnFilter } from './tables';
 import { applyFilterToSheet } from './table-filters';
 import type { ConditionalRule, NewRule } from './conditional';
 import { makeRuleId } from './conditional';
+import type { Validation, ValidationRule, ValidationResult } from './validation';
+import { makeValidationId, validateCellInput } from './validation';
 
 export interface NamedRange {
   name: string;
@@ -124,12 +126,20 @@ export class Workbook {
     this.apply(inverse, { asRedo: true });
   }
 
-  /** Convenience: set a cell from a raw user input string. */
-  setCellFromInput(sheetId: string, address: Address, input: string): void {
+  /** Convenience: set a cell from a raw user input string. Returns validation result. */
+  setCellFromInput(sheetId: string, address: Address, input: string): ValidationResult {
     const sheet = this.getSheet(sheetId);
     const next = parseInput(input);
     const prev = sheet.getCell(address);
-    if (!prev && !next) return; // both blank
+    if (!prev && !next) return { ok: true };
+    // Validate before committing (skip formulas — they're always accepted).
+    if (next && typeof next.raw !== 'string' && next.value !== undefined) {
+      const check = validateCellInput(this, sheet, address, next.value ?? null);
+      if (!check.ok) return check;
+    } else if (next && typeof next.raw === 'string' && !next.raw.startsWith('=')) {
+      const check = validateCellInput(this, sheet, address, next.value ?? next.raw);
+      if (!check.ok) return check;
+    }
     this.batch(() => {
       this.apply({ kind: 'setCell', sheetId, address, next, prev });
       if (next) {
@@ -141,6 +151,7 @@ export class Workbook {
         applyFilterToSheet(touched, sheet);
       }
     });
+    return { ok: true };
   }
 
   setStyle(sheetId: string, range: RangeAddress, patch: Partial<Style>): void {
@@ -279,6 +290,16 @@ export class Workbook {
     this.apply({ kind: 'updateCfRule', sheetId, ruleId, patch });
   }
 
+  addValidation(sheetId: string, range: RangeAddress, rule: ValidationRule, error?: string): Validation {
+    const v: Validation = { id: makeValidationId(), range, rule, error };
+    this.apply({ kind: 'addValidation', sheetId, validation: v });
+    return v;
+  }
+
+  removeValidation(sheetId: string, validationId: string): void {
+    this.apply({ kind: 'removeValidation', sheetId, validationId });
+  }
+
   addSheet(name?: string): Sheet {
     const n = name ?? this.uniqueSheetName();
     const cmd = this.apply({ kind: 'addSheet', name: n });
@@ -414,6 +435,18 @@ export class Workbook {
         }
         return { ...cmd, prev };
       }
+      case 'addValidation': {
+        const sheet = this.getSheet(cmd.sheetId);
+        sheet.validations.push(cmd.validation);
+        return cmd;
+      }
+      case 'removeValidation': {
+        const sheet = this.getSheet(cmd.sheetId);
+        const index = sheet.validations.findIndex((v) => v.id === cmd.validationId);
+        if (index < 0) return cmd;
+        const [snapshot] = sheet.validations.splice(index, 1);
+        return { ...cmd, snapshot, index };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -506,6 +539,12 @@ export class Workbook {
           ruleId: cmd.ruleId,
           patch: cmd.prev ?? {},
         };
+      case 'addValidation':
+        return { kind: 'removeValidation', sheetId: cmd.sheetId, validationId: cmd.validation.id };
+      case 'removeValidation':
+        return cmd.snapshot
+          ? { kind: 'addValidation', sheetId: cmd.sheetId, validation: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
       case 'composite':
         return {
           kind: 'composite',

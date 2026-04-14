@@ -7,6 +7,7 @@ import type { Address, RangeAddress } from './address';
 import type { Cell } from './cell';
 import type { Table } from './tables';
 import type { ConditionalRule } from './conditional';
+import type { Validation } from './validation';
 
 export type CommandKind =
   | 'setCell'
@@ -32,6 +33,8 @@ export type CommandKind =
   | 'addCfRule'
   | 'removeCfRule'
   | 'updateCfRule'
+  | 'addValidation'
+  | 'removeValidation'
   | 'composite';
 
 export interface SetCellCmd {
@@ -191,6 +194,20 @@ export interface UpdateCfRuleCmd {
   prev?: Partial<ConditionalRule>;
 }
 
+export interface AddValidationCmd {
+  kind: 'addValidation';
+  sheetId: string;
+  validation: Validation;
+}
+
+export interface RemoveValidationCmd {
+  kind: 'removeValidation';
+  sheetId: string;
+  validationId: string;
+  snapshot?: Validation;
+  index?: number;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -220,4 +237,6 @@ export type Command =
   | AddCfRuleCmd
   | RemoveCfRuleCmd
   | UpdateCfRuleCmd
+  | AddValidationCmd
+  | RemoveValidationCmd
   | CompositeCmd;

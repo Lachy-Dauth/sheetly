@@ -4,8 +4,10 @@ import type { Address } from '../engine/address';
 import type { Style } from '../engine/styles';
 import { NUMBER_FORMATS } from '../engine/number-formats';
 import { primaryRange } from '../grid/selection';
+import { sortRange, dedupeRange, textToColumns } from '../engine/data-ops';
 import { BorderMenu } from './BorderMenu';
 import { ConditionalMenu } from './ConditionalMenu';
+import { DataMenu } from './DataMenu';
 import type { ThemeId } from '../grid/theme';
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
   onStartPainter: (styleId: number) => void;
   painterActive: boolean;
   onImport: () => void;
+  onFind: () => void;
 }
 
 export function Toolbar(props: Props) {
@@ -31,6 +34,7 @@ export function Toolbar(props: Props) {
     onStartPainter,
     painterActive,
     onImport,
+    onFind,
   } = props;
 
   const activeRange = selectionRange ?? { start: selection, end: selection };
@@ -229,6 +233,25 @@ export function Toolbar(props: Props) {
           Table
         </button>
         <ConditionalMenu workbook={workbook} sheet={sheet} range={activeRange} />
+        <DataMenu
+          workbook={workbook}
+          sheet={sheet}
+          range={activeRange}
+          onFind={onFind}
+          onSort={(ascending) =>
+            sortRange(workbook, sheet, activeRange, [{ col: activeRange.start.col, ascending }])
+          }
+          onDedupe={() => dedupeRange(workbook, sheet, activeRange)}
+          onSplit={(delim) => textToColumns(workbook, sheet, activeRange, { delimiter: delim })}
+          onFreeze={() =>
+            workbook.apply({
+              kind: 'setFreeze',
+              sheetId: sheet.id,
+              rows: selection.row,
+              cols: selection.col,
+            })
+          }
+        />
       </div>
       <div className="group">
         <select
