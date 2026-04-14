@@ -111,6 +111,11 @@ export function groupKey(field: PivotField, v: Scalar): { key: string; sort: num
     const n = typeof v === 'number' ? v : Number(v);
     if (!Number.isFinite(n)) return { key: '(blank)', sort: Infinity, label: '(blank)' };
     const start = grouping.start ?? 0;
+    // Step must be positive; fall back to an ungrouped key when caller passes 0/NaN.
+    if (!(grouping.step > 0)) {
+      const label = num(n);
+      return { key: label, sort: n, label };
+    }
     const bucket = Math.floor((n - start) / grouping.step);
     const lo = start + bucket * grouping.step;
     const hi = lo + grouping.step;
