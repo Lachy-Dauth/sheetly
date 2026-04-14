@@ -10,6 +10,8 @@ import type { ConditionalRule } from './conditional';
 import type { Validation } from './validation';
 import type { Chart } from './charts';
 import type { Pivot } from './pivots';
+import type { Comment, CommentReply } from './comments';
+import type { SheetProtection } from './protection';
 
 export type CommandKind =
   | 'setCell'
@@ -43,6 +45,12 @@ export type CommandKind =
   | 'addPivot'
   | 'removePivot'
   | 'updatePivot'
+  | 'addComment'
+  | 'removeComment'
+  | 'updateComment'
+  | 'addCommentReply'
+  | 'removeCommentReply'
+  | 'setProtection'
   | 'composite';
 
 export interface SetCellCmd {
@@ -260,6 +268,45 @@ export interface UpdatePivotCmd {
   prev?: Partial<Pivot>;
 }
 
+export interface AddCommentCmd {
+  kind: 'addComment';
+  comment: Comment;
+}
+
+export interface RemoveCommentCmd {
+  kind: 'removeComment';
+  commentId: string;
+  snapshot?: Comment;
+}
+
+export interface UpdateCommentCmd {
+  kind: 'updateComment';
+  commentId: string;
+  patch: Partial<Comment>;
+  prev?: Partial<Comment>;
+}
+
+export interface AddCommentReplyCmd {
+  kind: 'addCommentReply';
+  commentId: string;
+  reply: CommentReply;
+}
+
+export interface RemoveCommentReplyCmd {
+  kind: 'removeCommentReply';
+  commentId: string;
+  replyId: string;
+  snapshot?: CommentReply;
+  index?: number;
+}
+
+export interface SetProtectionCmd {
+  kind: 'setProtection';
+  sheetId: string;
+  protection?: SheetProtection;
+  prev?: SheetProtection;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -298,4 +345,10 @@ export type Command =
   | AddPivotCmd
   | RemovePivotCmd
   | UpdatePivotCmd
+  | AddCommentCmd
+  | RemoveCommentCmd
+  | UpdateCommentCmd
+  | AddCommentReplyCmd
+  | RemoveCommentReplyCmd
+  | SetProtectionCmd
   | CompositeCmd;

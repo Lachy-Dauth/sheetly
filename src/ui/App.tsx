@@ -7,7 +7,10 @@ import { SheetTabs } from './SheetTabs';
 import { FindReplace } from './FindReplace';
 import { ChartsPanel } from './ChartsPanel';
 import { PivotPanel } from './PivotPanel';
+import { CommentsPanel } from './CommentsPanel';
 import { importCsv } from '../io/csv';
+import { printSheet } from '../io/print';
+import { downloadReadonlyBundle } from '../io/bundle';
 import type { Address, RangeAddress } from '../engine/address';
 import type { ThemeId } from '../grid/theme';
 
@@ -24,6 +27,7 @@ export function App() {
   const [findOpen, setFindOpen] = useState(false);
   const [chartsOpen, setChartsOpen] = useState(false);
   const [pivotsOpen, setPivotsOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const [, forceRender] = useState(0);
   const rerender = () => forceRender((n) => n + 1);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -70,6 +74,19 @@ export function App() {
         onToggleCharts={() => setChartsOpen((v) => !v)}
         onTogglePivots={() => setPivotsOpen((v) => !v)}
         onOpenPivots={() => setPivotsOpen(true)}
+        onToggleComments={() => setCommentsOpen((v) => !v)}
+        onPrint={() => printSheet(workbook, sheet)}
+        onExportBundle={() => downloadReadonlyBundle(workbook)}
+        onToggleProtection={() => {
+          if (sheet.protection?.enabled) {
+            workbook.setProtection(sheet.id, undefined);
+          } else {
+            workbook.setProtection(sheet.id, {
+              enabled: true,
+              message: 'This sheet is protected. Unlock it to edit.',
+            });
+          }
+        }}
       />
       <FormulaBar workbook={workbook} sheet={sheet} selection={selection} />
       <Grid
@@ -105,6 +122,14 @@ export function App() {
       ) : null}
       {pivotsOpen ? (
         <PivotPanel workbook={workbook} sheet={sheet} onClose={() => setPivotsOpen(false)} />
+      ) : null}
+      {commentsOpen ? (
+        <CommentsPanel
+          workbook={workbook}
+          sheet={sheet}
+          selection={selection}
+          onClose={() => setCommentsOpen(false)}
+        />
       ) : null}
     </div>
   );

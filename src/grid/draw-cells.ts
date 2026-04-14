@@ -82,6 +82,23 @@ export function drawCells(d: DrawCtx): void {
     drawCellBorders(d, b);
   }
 
+  // Layer 5: comment indicators (top-right red triangle)
+  if (workbook.comments && workbook.comments.forSheet(sheet.id).length > 0) {
+    ctx.fillStyle = '#d13b3b';
+    for (const b of boxes) {
+      if (!workbook.comments.hasAt(sheet.id, { row: b.row, col: b.col })) continue;
+      const size = 6;
+      const x = b.x + b.w - size;
+      const y = b.y;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + size, y);
+      ctx.lineTo(x + size, y + size);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   ctx.restore();
 }
 

@@ -409,3 +409,63 @@ body,
   background: var(--accent-bg, rgba(0, 0, 0, 0.04));
   font-weight: 600;
 }
+
+.comment-new,
+.comment-reply {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.comment-new textarea,
+.comment-reply textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.comment-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.comment-list > li {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.comment-list > li.active {
+  border-color: var(--accent, #2876d2);
+  box-shadow: 0 0 0 1px var(--accent, #2876d2);
+}
+
+.comment-head {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.comment-body {
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.comment-replies {
+  list-style: none;
+  padding: 6px 0 0 12px;
+  margin: 6px 0 0;
+  border-top: 1px dashed var(--border);
+  font-size: 12px;
+}
+
+.comment-replies li {
+  margin-bottom: 4px;
+}

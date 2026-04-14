@@ -24,6 +24,10 @@ import type { Pivot, PivotSource } from './pivots';
 import { PivotRegistry, makePivot } from './pivots';
 import { buildPivotCache } from './pivot-cache';
 import { computePivotLayout } from './pivot-layout';
+import type { Comment, CommentReply } from './comments';
+import { CommentRegistry, makeCommentId, makeReplyId } from './comments';
+import type { SheetProtection } from './protection';
+import { isEditAllowed } from './protection';
 
 export interface NamedRange {
   name: string;
@@ -39,6 +43,7 @@ export class Workbook {
   styles = new StyleTable();
   tables = new TableRegistry();
   pivots = new PivotRegistry();
+  comments = new CommentRegistry();
   runtime: FormulaRuntime;
 
   private history: Command[] = [];
@@ -136,6 +141,12 @@ export class Workbook {
   /** Convenience: set a cell from a raw user input string. Returns validation result. */
   setCellFromInput(sheetId: string, address: Address, input: string): ValidationResult {
     const sheet = this.getSheet(sheetId);
+    if (!isEditAllowed(sheet.protection, address)) {
+      return {
+        ok: false,
+        message: sheet.protection?.message ?? 'This sheet is protected.',
+      };
+    }
     const parsed = parseInput(input);
     const prev = sheet.getCell(address);
     if (!prev && !parsed) return { ok: true };
@@ -431,6 +442,65 @@ export class Workbook {
     if (changes.length > 0) this.apply({ kind: 'setCells', sheetId: pivot.sheetId, changes });
   }
 
+  /** Add a new threaded comment anchored to a cell. */
+  addComment(
+    sheetId: string,
+    address: Address,
+    args: { author: string; text: string; at?: number },
+  ): Comment {
+    const existing = this.comments.findAt(sheetId, address);
+    if (existing) {
+      // Fallback to adding a reply instead of a second root comment.
+      const reply: CommentReply = {
+        id: makeReplyId(),
+        author: args.author,
+        text: args.text,
+        at: args.at ?? Date.now(),
+      };
+      this.apply({ kind: 'addCommentReply', commentId: existing.id, reply });
+      return existing;
+    }
+    const comment: Comment = {
+      id: makeCommentId(),
+      sheetId,
+      address,
+      author: args.author,
+      text: args.text,
+      at: args.at ?? Date.now(),
+      replies: [],
+    };
+    this.apply({ kind: 'addComment', comment });
+    return comment;
+  }
+
+  removeComment(commentId: string): void {
+    this.apply({ kind: 'removeComment', commentId });
+  }
+
+  updateComment(commentId: string, patch: Partial<Comment>): void {
+    this.apply({ kind: 'updateComment', commentId, patch });
+  }
+
+  replyToComment(commentId: string, args: { author: string; text: string; at?: number }): CommentReply {
+    const reply: CommentReply = {
+      id: makeReplyId(),
+      author: args.author,
+      text: args.text,
+      at: args.at ?? Date.now(),
+    };
+    this.apply({ kind: 'addCommentReply', commentId, reply });
+    return reply;
+  }
+
+  removeCommentReply(commentId: string, replyId: string): void {
+    this.apply({ kind: 'removeCommentReply', commentId, replyId });
+  }
+
+  /** Turn sheet protection on or off. Pass `undefined` to clear it entirely. */
+  setProtection(sheetId: string, protection: SheetProtection | undefined): void {
+    this.apply({ kind: 'setProtection', sheetId, protection });
+  }
+
   /** Write a sparkline onto a cell via a standard setCell command. */
   setSparkline(sheetId: string, address: Address, sparkline: Sparkline | undefined): void {
     const sheet = this.getSheet(sheetId);
@@ -635,6 +705,44 @@ export class Workbook {
         }
         return { ...cmd, prev };
       }
+      case 'addComment': {
+        this.comments.add(cmd.comment);
+        return cmd;
+      }
+      case 'removeComment': {
+        const snapshot = this.comments.remove(cmd.commentId);
+        return { ...cmd, snapshot };
+      }
+      case 'updateComment': {
+        const c = this.comments.get(cmd.commentId);
+        if (!c) return cmd;
+        const prev: Partial<Comment> = {};
+        const cc = c as unknown as Record<string, unknown>;
+        for (const k of Object.keys(cmd.patch) as (keyof Comment)[]) {
+          (prev as Record<string, unknown>)[k] = cc[k];
+          cc[k] = (cmd.patch as Record<string, unknown>)[k];
+        }
+        return { ...cmd, prev };
+      }
+      case 'addCommentReply': {
+        const c = this.comments.get(cmd.commentId);
+        if (c) c.replies.push(cmd.reply);
+        return cmd;
+      }
+      case 'removeCommentReply': {
+        const c = this.comments.get(cmd.commentId);
+        if (!c) return cmd;
+        const index = c.replies.findIndex((r) => r.id === cmd.replyId);
+        if (index < 0) return cmd;
+        const [snapshot] = c.replies.splice(index, 1);
+        return { ...cmd, snapshot, index };
+      }
+      case 'setProtection': {
+        const sheet = this.getSheet(cmd.sheetId);
+        const prev = sheet.protection;
+        sheet.protection = cmd.protection;
+        return { ...cmd, prev };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -757,6 +865,22 @@ export class Workbook {
           : { kind: 'composite', label: 'no-op', children: [] };
       case 'updatePivot':
         return { kind: 'updatePivot', pivotId: cmd.pivotId, patch: cmd.prev ?? {} };
+      case 'addComment':
+        return { kind: 'removeComment', commentId: cmd.comment.id };
+      case 'removeComment':
+        return cmd.snapshot
+          ? { kind: 'addComment', comment: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'updateComment':
+        return { kind: 'updateComment', commentId: cmd.commentId, patch: cmd.prev ?? {} };
+      case 'addCommentReply':
+        return { kind: 'removeCommentReply', commentId: cmd.commentId, replyId: cmd.reply.id };
+      case 'removeCommentReply':
+        return cmd.snapshot
+          ? { kind: 'addCommentReply', commentId: cmd.commentId, reply: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'setProtection':
+        return { kind: 'setProtection', sheetId: cmd.sheetId, protection: cmd.prev };
       case 'composite':
         return {
           kind: 'composite',

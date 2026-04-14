@@ -8,6 +8,7 @@ import type { Cell } from './cell';
 import type { ConditionalRule } from './conditional';
 import type { Validation } from './validation';
 import type { Chart } from './charts';
+import type { SheetProtection } from './protection';
 
 export const DEFAULT_COL_WIDTH = 96;
 export const DEFAULT_ROW_HEIGHT = 22;
@@ -48,6 +49,7 @@ export class Sheet {
   conditionalRules: ConditionalRule[] = [];
   validations: Validation[] = [];
   charts: Chart[] = [];
+  protection?: SheetProtection;
   /** Approx max used row/col, for navigation limits. */
   maxRow = 0;
   maxCol = 0;

@@ -26,6 +26,10 @@ interface Props {
   onToggleCharts: () => void;
   onTogglePivots: () => void;
   onOpenPivots: () => void;
+  onToggleComments: () => void;
+  onPrint: () => void;
+  onExportBundle: () => void;
+  onToggleProtection: () => void;
 }
 
 export function Toolbar(props: Props) {
@@ -43,6 +47,10 @@ export function Toolbar(props: Props) {
     onToggleCharts,
     onTogglePivots,
     onOpenPivots,
+    onToggleComments,
+    onPrint,
+    onExportBundle,
+    onToggleProtection,
   } = props;
 
   const activeRange = selectionRange ?? { start: selection, end: selection };
@@ -102,6 +110,12 @@ export function Toolbar(props: Props) {
           title="Export workbook as JSON"
         >
           JSON
+        </button>
+        <button onClick={onPrint} title="Print / Save as PDF">
+          PDF
+        </button>
+        <button onClick={onExportBundle} title="Export a read-only HTML bundle">
+          Share
         </button>
       </div>
       <div className="group">
@@ -258,6 +272,16 @@ export function Toolbar(props: Props) {
         />
         <button onClick={onTogglePivots} title="Open pivot tables panel">
           Σ
+        </button>
+        <button onClick={onToggleComments} title="Open comments panel">
+          💬
+        </button>
+        <button
+          onClick={onToggleProtection}
+          title={sheet.protection?.enabled ? 'Unprotect sheet' : 'Protect sheet'}
+          className={sheet.protection?.enabled ? 'active' : ''}
+        >
+          {sheet.protection?.enabled ? '🔒' : '🔓'}
         </button>
         <DataMenu
           workbook={workbook}
