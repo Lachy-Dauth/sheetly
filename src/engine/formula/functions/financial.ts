@@ -48,10 +48,24 @@ export function installFinancial(): void {
     const type = args.length > 4 ? asNumber(args[4]!) : 0;
     if (anyErr(rate, pmtAmt, pv, fv, type)) return makeError('#VALUE!');
     const r = rate as number;
-    if (r === 0) return -((pv as number) + (fv as number)) / (pmtAmt as number);
-    const numerator = (pmtAmt as number) * (1 + r * (type as number)) - (fv as number) * r;
-    const denominator = (pv as number) * r + (pmtAmt as number) * (1 + r * (type as number));
-    return Math.log(numerator / denominator) / Math.log(1 + r);
+    const pmtN = pmtAmt as number;
+    const pvN = pv as number;
+    const fvN = fv as number;
+    const tN = type as number;
+    if (r === 0) {
+      // No interest: solve pv + pmt*N + fv = 0. With pmt=0 this is unsolvable
+      // unless pv == -fv (any N works); otherwise it's #NUM!.
+      if (pmtN === 0) return makeError('#NUM!');
+      return -(pvN + fvN) / pmtN;
+    }
+    const numerator = pmtN * (1 + r * tN) - fvN * r;
+    const denominator = pvN * r + pmtN * (1 + r * tN);
+    if (denominator === 0) return makeError('#NUM!');
+    const ratio = numerator / denominator;
+    // log of a non-positive number is NaN/-Inf — Excel surfaces #NUM!.
+    if (!(ratio > 0)) return makeError('#NUM!');
+    if (1 + r <= 0) return makeError('#NUM!');
+    return Math.log(ratio) / Math.log(1 + r);
   });
 
   register('RATE', (args) => {

@@ -177,6 +177,12 @@ export class Workbook {
     this.apply({ kind: 'setName', name, ref, prev });
   }
 
+  removeName(name: string): void {
+    const prev = this.namedRanges.get(name)?.ref;
+    if (prev === undefined) return;
+    this.apply({ kind: 'removeName', name, prev });
+  }
+
   /** Merge a range, unmerging any existing merges it touches first. */
   mergeRange(sheetId: string, range: RangeAddress): void {
     const sheet = this.getSheet(sheetId);
@@ -392,6 +398,11 @@ export class Workbook {
         this.namedRanges.set(cmd.name, { name: cmd.name, ref: cmd.ref });
         return { ...cmd, prev };
       }
+      case 'removeName': {
+        const prev = this.namedRanges.get(cmd.name)?.ref;
+        this.namedRanges.delete(cmd.name);
+        return { ...cmd, prev };
+      }
       case 'addTable': {
         this.tables.add(cmd.table);
         return cmd;
@@ -517,7 +528,15 @@ export class Workbook {
       case 'setSheetColor':
         return { kind: 'setSheetColor', sheetId: cmd.sheetId, color: cmd.prev };
       case 'setName':
-        return { kind: 'setName', name: cmd.name, ref: cmd.prev ?? '' };
+        // If the name didn't exist before, undo by deleting it (not by setting
+        // ref to the empty string, which would leave a junk entry behind).
+        return cmd.prev === undefined
+          ? { kind: 'removeName', name: cmd.name }
+          : { kind: 'setName', name: cmd.name, ref: cmd.prev };
+      case 'removeName':
+        return cmd.prev === undefined
+          ? { kind: 'composite', label: 'no-op', children: [] }
+          : { kind: 'setName', name: cmd.name, ref: cmd.prev };
       case 'addTable':
         return { kind: 'removeTable', tableId: cmd.table.id };
       case 'removeTable':

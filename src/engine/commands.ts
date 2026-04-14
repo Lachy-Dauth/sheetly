@@ -154,6 +154,12 @@ export interface SetNameCmd {
   prev?: string;
 }
 
+export interface RemoveNameCmd {
+  kind: 'removeName';
+  name: string;
+  prev?: string;
+}
+
 export interface AddTableCmd {
   kind: 'addTable';
   table: Table;
@@ -231,6 +237,7 @@ export type Command =
   | SetFreezeCmd
   | SetSheetColorCmd
   | SetNameCmd
+  | RemoveNameCmd
   | AddTableCmd
   | RemoveTableCmd
   | UpdateTableCmd
