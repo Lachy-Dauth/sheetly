@@ -8,6 +8,9 @@ import type { Cell } from '../engine/cell';
 import type { Sheet } from '../engine/sheet';
 import type { BorderSide, Style } from '../engine/styles';
 import type { Workbook } from '../engine/workbook';
+import type { CfOverlay } from '../engine/conditional';
+import { evaluateRules } from '../engine/conditional';
+import { cellKey } from '../engine/address';
 import { formatValue } from './format';
 import type { DrawCtx } from './theme';
 import { HEADER_H, HEADER_W } from './layout';
@@ -21,6 +24,7 @@ interface CellBox {
   h: number;
   cell: Cell | undefined;
   style: Style | undefined;
+  overlay?: CfOverlay;
   mergeEnd?: { row: number; col: number };
 }
 
@@ -31,7 +35,8 @@ export function drawCells(d: DrawCtx): void {
   ctx.rect(HEADER_W, HEADER_H, viewport.width - HEADER_W, viewport.height - HEADER_H);
   ctx.clip();
 
-  const boxes = collectVisibleBoxes(sheet, workbook, visible);
+  const cfOverlays = sheet.conditionalRules.length > 0 ? evaluateRules(sheet, workbook) : undefined;
+  const boxes = collectVisibleBoxes(sheet, workbook, visible, cfOverlays);
   const mergedCovered = coveredByMerges(sheet);
 
   // Layer 1: gridlines for non-merged cells
@@ -39,15 +44,23 @@ export function drawCells(d: DrawCtx): void {
   ctx.lineWidth = 1;
   drawGridlines(d, mergedCovered);
 
-  // Layer 2: fills
+  // Layer 2: fills (CF fill wins over explicit fill for a cleaner preview)
   for (const b of boxes) {
-    if (b.style?.fill) {
-      ctx.fillStyle = b.style.fill;
+    const fill = b.overlay?.fill ?? b.style?.fill;
+    if (fill) {
+      ctx.fillStyle = fill;
       ctx.fillRect(b.x, b.y, b.w, b.h);
     } else if (b.mergeEnd) {
-      // Merged cells without fill still need to erase the default gridlines drawn above
       ctx.fillStyle = theme.bg;
       ctx.fillRect(b.x + 0.5, b.y + 0.5, b.w - 0.5, b.h - 0.5);
+    }
+    if (b.overlay?.dataBar) {
+      const pad = 2;
+      const barW = Math.max(0, (b.w - pad * 2) * b.overlay.dataBar.fraction);
+      ctx.fillStyle = b.overlay.dataBar.color;
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(b.x + pad, b.y + pad, barW, b.h - pad * 2);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -85,6 +98,7 @@ function collectVisibleBoxes(
   sheet: Sheet,
   workbook: Workbook,
   visible: DrawCtx['visible'],
+  overlays?: Map<number, CfOverlay>,
 ): CellBox[] {
   const boxes: CellBox[] = [];
   const covered = coveredByMerges(sheet);
@@ -114,7 +128,8 @@ function collectVisibleBoxes(
       const cell = sheet.getCell({ row, col });
       const style =
         cell?.styleId !== undefined ? workbook.styles.get(cell.styleId) : undefined;
-      boxes.push({ row, col, x, y, w: cellW, h: cellH, cell, style, mergeEnd });
+      const overlay = overlays?.get(cellKey(row, col));
+      boxes.push({ row, col, x, y, w: cellW, h: cellH, cell, style, overlay, mergeEnd });
       x += w;
     }
     y += h;
@@ -149,16 +164,19 @@ function drawCellText(d: DrawCtx, box: CellBox): void {
   const { ctx, theme } = d;
   const cell = box.cell!;
   const style = box.style;
+  const overlay = box.overlay;
   const raw = cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
   const text = formatValue(raw ?? null, style?.format ?? cell.format);
   if (!text) return;
 
   const size = style?.fontSize ?? 12;
-  const weight = style?.bold ? 'bold' : 'normal';
-  const italic = style?.italic ? 'italic' : 'normal';
+  const bold = overlay?.bold ?? style?.bold;
+  const italicOn = overlay?.italic ?? style?.italic;
+  const weight = bold ? 'bold' : 'normal';
+  const italic = italicOn ? 'italic' : 'normal';
   const family = style?.font ?? '-apple-system, "Segoe UI", sans-serif';
   ctx.font = `${italic} ${weight} ${size}px ${family}`;
-  ctx.fillStyle = style?.color ?? theme.text;
+  ctx.fillStyle = overlay?.color ?? style?.color ?? theme.text;
 
   const padding = 4;
   const isNumeric = typeof raw === 'number';

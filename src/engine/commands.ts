@@ -6,6 +6,7 @@
 import type { Address, RangeAddress } from './address';
 import type { Cell } from './cell';
 import type { Table } from './tables';
+import type { ConditionalRule } from './conditional';
 
 export type CommandKind =
   | 'setCell'
@@ -28,6 +29,9 @@ export type CommandKind =
   | 'addTable'
   | 'removeTable'
   | 'updateTable'
+  | 'addCfRule'
+  | 'removeCfRule'
+  | 'updateCfRule'
   | 'composite';
 
 export interface SetCellCmd {
@@ -165,6 +169,28 @@ export interface UpdateTableCmd {
   prev?: Partial<Table>;
 }
 
+export interface AddCfRuleCmd {
+  kind: 'addCfRule';
+  sheetId: string;
+  rule: ConditionalRule;
+}
+
+export interface RemoveCfRuleCmd {
+  kind: 'removeCfRule';
+  sheetId: string;
+  ruleId: string;
+  snapshot?: ConditionalRule;
+  index?: number;
+}
+
+export interface UpdateCfRuleCmd {
+  kind: 'updateCfRule';
+  sheetId: string;
+  ruleId: string;
+  patch: Partial<ConditionalRule>;
+  prev?: Partial<ConditionalRule>;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -191,4 +217,7 @@ export type Command =
   | AddTableCmd
   | RemoveTableCmd
   | UpdateTableCmd
+  | AddCfRuleCmd
+  | RemoveCfRuleCmd
+  | UpdateCfRuleCmd
   | CompositeCmd;

@@ -14,6 +14,8 @@ import { parseInput } from './parse-input';
 import { TableRegistry, makeTable } from './tables';
 import type { Table, ColumnFilter } from './tables';
 import { applyFilterToSheet } from './table-filters';
+import type { ConditionalRule, NewRule } from './conditional';
+import { makeRuleId } from './conditional';
 
 export interface NamedRange {
   name: string;
@@ -258,6 +260,25 @@ export class Workbook {
     this.apply({ kind: 'removeTable', tableId, snapshot });
   }
 
+  addConditionalRule(sheetId: string, rule: NewRule): ConditionalRule {
+    const sheet = this.getSheet(sheetId);
+    const full = {
+      ...rule,
+      id: makeRuleId(),
+      priority: rule.priority ?? (sheet.conditionalRules.at(-1)?.priority ?? 0) + 1,
+    } as ConditionalRule;
+    this.apply({ kind: 'addCfRule', sheetId, rule: full });
+    return full;
+  }
+
+  removeConditionalRule(sheetId: string, ruleId: string): void {
+    this.apply({ kind: 'removeCfRule', sheetId, ruleId });
+  }
+
+  updateConditionalRule(sheetId: string, ruleId: string, patch: Partial<ConditionalRule>): void {
+    this.apply({ kind: 'updateCfRule', sheetId, ruleId, patch });
+  }
+
   addSheet(name?: string): Sheet {
     const n = name ?? this.uniqueSheetName();
     const cmd = this.apply({ kind: 'addSheet', name: n });
@@ -369,6 +390,30 @@ export class Workbook {
         }
         return { ...cmd, prev };
       }
+      case 'addCfRule': {
+        const sheet = this.getSheet(cmd.sheetId);
+        sheet.conditionalRules.push(cmd.rule);
+        return cmd;
+      }
+      case 'removeCfRule': {
+        const sheet = this.getSheet(cmd.sheetId);
+        const index = sheet.conditionalRules.findIndex((r) => r.id === cmd.ruleId);
+        if (index < 0) return cmd;
+        const [snapshot] = sheet.conditionalRules.splice(index, 1);
+        return { ...cmd, snapshot, index };
+      }
+      case 'updateCfRule': {
+        const sheet = this.getSheet(cmd.sheetId);
+        const rule = sheet.conditionalRules.find((r) => r.id === cmd.ruleId);
+        if (!rule) return cmd;
+        const prev: Partial<ConditionalRule> = {};
+        const rr = rule as unknown as Record<string, unknown>;
+        for (const k of Object.keys(cmd.patch) as (keyof ConditionalRule)[]) {
+          (prev as Record<string, unknown>)[k] = rr[k];
+          rr[k] = (cmd.patch as Record<string, unknown>)[k];
+        }
+        return { ...cmd, prev };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -448,6 +493,19 @@ export class Workbook {
           : { kind: 'composite', label: 'no-op', children: [] };
       case 'updateTable':
         return { kind: 'updateTable', tableId: cmd.tableId, patch: cmd.prev ?? {} };
+      case 'addCfRule':
+        return { kind: 'removeCfRule', sheetId: cmd.sheetId, ruleId: cmd.rule.id };
+      case 'removeCfRule':
+        return cmd.snapshot
+          ? { kind: 'addCfRule', sheetId: cmd.sheetId, rule: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'updateCfRule':
+        return {
+          kind: 'updateCfRule',
+          sheetId: cmd.sheetId,
+          ruleId: cmd.ruleId,
+          patch: cmd.prev ?? {},
+        };
       case 'composite':
         return {
           kind: 'composite',

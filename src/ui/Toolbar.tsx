@@ -5,6 +5,7 @@ import type { Style } from '../engine/styles';
 import { NUMBER_FORMATS } from '../engine/number-formats';
 import { primaryRange } from '../grid/selection';
 import { BorderMenu } from './BorderMenu';
+import { ConditionalMenu } from './ConditionalMenu';
 import type { ThemeId } from '../grid/theme';
 
 interface Props {
@@ -227,6 +228,7 @@ export function Toolbar(props: Props) {
         >
           Table
         </button>
+        <ConditionalMenu workbook={workbook} sheet={sheet} range={activeRange} />
       </div>
       <div className="group">
         <select
