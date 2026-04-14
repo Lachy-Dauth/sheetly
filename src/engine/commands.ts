@@ -5,6 +5,7 @@
 
 import type { Address, RangeAddress } from './address';
 import type { Cell } from './cell';
+import type { Table } from './tables';
 
 export type CommandKind =
   | 'setCell'
@@ -24,6 +25,9 @@ export type CommandKind =
   | 'setFreeze'
   | 'setSheetColor'
   | 'setName'
+  | 'addTable'
+  | 'removeTable'
+  | 'updateTable'
   | 'composite';
 
 export interface SetCellCmd {
@@ -143,6 +147,24 @@ export interface SetNameCmd {
   prev?: string;
 }
 
+export interface AddTableCmd {
+  kind: 'addTable';
+  table: Table;
+}
+
+export interface RemoveTableCmd {
+  kind: 'removeTable';
+  tableId: string;
+  snapshot?: Table;
+}
+
+export interface UpdateTableCmd {
+  kind: 'updateTable';
+  tableId: string;
+  patch: Partial<Table>;
+  prev?: Partial<Table>;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -166,4 +188,7 @@ export type Command =
   | SetFreezeCmd
   | SetSheetColorCmd
   | SetNameCmd
+  | AddTableCmd
+  | RemoveTableCmd
+  | UpdateTableCmd
   | CompositeCmd;

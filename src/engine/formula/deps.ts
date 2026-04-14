@@ -6,6 +6,7 @@
 import type { AstNode } from './ast';
 import type { Workbook } from '../workbook';
 import type { Address } from '../address';
+import { resolveStructuredRange } from '../tables';
 
 export interface Dependency {
   sheetId: string;
@@ -18,17 +19,39 @@ export function collectDependencies(
   ast: AstNode,
   workbook: Workbook,
   currentSheetId: string,
+  currentCell?: Address,
 ): Dependency[] {
   const out: Dependency[] = [];
-  visit(ast, workbook, currentSheetId, out);
+  visit(ast, workbook, currentSheetId, out, currentCell);
   return out;
 }
 
-function visit(node: AstNode, wb: Workbook, curSheet: string, out: Dependency[]): void {
+function visit(
+  node: AstNode,
+  wb: Workbook,
+  curSheet: string,
+  out: Dependency[],
+  curCell?: Address,
+): void {
   switch (node.kind) {
     case 'literal':
     case 'name':
       return;
+    case 'struct-ref': {
+      let table = wb.tables.byNameCI(node.table);
+      if (!table && node.table === '' && curCell) table = wb.tables.findAt(curSheet, curCell);
+      if (!table) return;
+      const range = resolveStructuredRange(table, node.specifier, curCell);
+      if (!range) return;
+      const size = (range.end.row - range.start.row + 1) * (range.end.col - range.start.col + 1);
+      if (size > MAX_RANGE_EXPANSION) return;
+      for (let row = range.start.row; row <= range.end.row; row++) {
+        for (let col = range.start.col; col <= range.end.col; col++) {
+          out.push({ sheetId: table.sheetId, address: { row, col } });
+        }
+      }
+      return;
+    }
     case 'ref': {
       const sheetId = node.sheet ? wb.sheetByName(node.sheet)?.id : curSheet;
       if (sheetId) out.push({ sheetId, address: node.address });
@@ -48,17 +71,17 @@ function visit(node: AstNode, wb: Workbook, curSheet: string, out: Dependency[])
       return;
     }
     case 'unary':
-      visit(node.operand, wb, curSheet, out);
+      visit(node.operand, wb, curSheet, out, curCell);
       return;
     case 'binary':
-      visit(node.left, wb, curSheet, out);
-      visit(node.right, wb, curSheet, out);
+      visit(node.left, wb, curSheet, out, curCell);
+      visit(node.right, wb, curSheet, out, curCell);
       return;
     case 'call':
-      for (const arg of node.args) visit(arg, wb, curSheet, out);
+      for (const arg of node.args) visit(arg, wb, curSheet, out, curCell);
       return;
     case 'array':
-      for (const row of node.rows) for (const cell of row) visit(cell, wb, curSheet, out);
+      for (const row of node.rows) for (const cell of row) visit(cell, wb, curSheet, out, curCell);
       return;
   }
 }

@@ -144,7 +144,7 @@ export class FormulaRuntime {
     if (!cell || typeof cell.raw !== 'string' || !cell.raw.startsWith('=')) return;
     const parsed = parseFormula(cell.raw.slice(1));
     if (!parsed.ok) return;
-    const deps = collectDependencies(parsed.ast, this.workbook, sheetId);
+    const deps = collectDependencies(parsed.ast, this.workbook, sheetId, { row, col });
     const pre = new Set<DepKey>();
     for (const dep of deps) {
       const depKey = keyOf(dep.sheetId, dep.address);

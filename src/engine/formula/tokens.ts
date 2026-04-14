@@ -10,6 +10,7 @@ export type TokenKind =
   | 'ident'
   | 'ref'
   | 'range-ref'
+  | 'struct-ref'
   | 'op'
   | 'lparen'
   | 'rparen'
@@ -22,12 +23,17 @@ export type TokenKind =
   | 'bad'
   | 'eof';
 
+export interface StructRefValue {
+  table: string;
+  specifier: string;
+}
+
 export interface Token {
   kind: TokenKind;
   text: string;
   start: number;
   end: number;
-  value?: number | string | boolean;
+  value?: number | string | boolean | StructRefValue;
 }
 
 const OPS = ['<>', '<=', '>=', '<', '>', '=', '+', '-', '*', '/', '%', '^', '&'];
@@ -182,16 +188,19 @@ export function tokenize(source: string): Token[] {
       const refMatch = /^\$?[A-Za-z]+\$?\d+(?::\$?[A-Za-z]+\$?\d+)?/.exec(source.slice(i));
       if (refMatch) {
         const end = i + refMatch[0].length;
-        const text = (sheet ? (sheet.includes(' ') ? `'${sheet}'!` : sheet + '!') : '') + refMatch[0];
-        tokens.push({
-          kind: refMatch[0].includes(':') ? 'range-ref' : 'ref',
-          text,
-          start,
-          end,
-          value: text,
-        });
-        i = end;
-        continue;
+        // Identifier-like prefixes that are followed by '[' are table names, not refs.
+        if (source[end] !== '[') {
+          const text = (sheet ? (sheet.includes(' ') ? `'${sheet}'!` : sheet + '!') : '') + refMatch[0];
+          tokens.push({
+            kind: refMatch[0].includes(':') ? 'range-ref' : 'ref',
+            text,
+            start,
+            end,
+            value: text,
+          });
+          i = end;
+          continue;
+        }
       }
       // Identifier / function name.
       let j = i;
@@ -205,6 +214,23 @@ export function tokenize(source: string): Token[] {
       const up = id.toUpperCase();
       if (up === 'TRUE' || up === 'FALSE') {
         tokens.push({ kind: 'bool', text: up, start, end: j, value: up === 'TRUE' });
+      } else if (source[j] === '[') {
+        // Structured reference: Table[spec]
+        const br = readBracketSpec(source, j);
+        if (br) {
+          tokens.push({
+            kind: 'struct-ref',
+            text: source.slice(start, br.end),
+            start,
+            end: br.end,
+            value: { table: id, specifier: br.spec },
+          });
+          i = br.end;
+          continue;
+        }
+        tokens.push({ kind: 'bad', text: source.slice(start, j + 1), start, end: j + 1 });
+        i = j + 1;
+        continue;
       } else {
         const text = (sheet ? (sheet.includes(' ') ? `'${sheet}'!` : sheet + '!') : '') + id;
         tokens.push({ kind: 'ident', text, start, end: j, value: text });
@@ -212,11 +238,43 @@ export function tokenize(source: string): Token[] {
       i = j;
       continue;
     }
+    // Bare [@Col] or [Col] — structured ref to current table (table name filled at eval time).
+    if (c === '[') {
+      const br = readBracketSpec(source, i);
+      if (br) {
+        tokens.push({
+          kind: 'struct-ref',
+          text: source.slice(i, br.end),
+          start: i,
+          end: br.end,
+          value: { table: '', specifier: br.spec },
+        });
+        i = br.end;
+        continue;
+      }
+    }
     tokens.push({ kind: 'bad', text: c, start: i, end: i + 1 });
     i++;
   }
   tokens.push({ kind: 'eof', text: '', start: len, end: len });
   return tokens;
+}
+
+function readBracketSpec(source: string, i: number): { spec: string; end: number } | null {
+  if (source[i] !== '[') return null;
+  let depth = 1;
+  let j = i + 1;
+  while (j < source.length && depth > 0) {
+    const c = source[j]!;
+    if (c === '[') depth++;
+    else if (c === ']') {
+      depth--;
+      if (depth === 0) break;
+    }
+    j++;
+  }
+  if (depth !== 0) return null;
+  return { spec: source.slice(i + 1, j), end: j + 1 };
 }
 
 function isDigit(c: string): boolean {

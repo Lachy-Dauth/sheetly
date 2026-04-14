@@ -141,6 +141,11 @@ class Parser {
       case 'ref':
       case 'range-ref':
         return this.parseRefToken(this.next());
+      case 'struct-ref': {
+        this.next();
+        const v = t.value as { table: string; specifier: string };
+        return { kind: 'struct-ref', table: v.table, specifier: v.specifier };
+      }
       case 'ident': {
         const name = t.text;
         this.next();

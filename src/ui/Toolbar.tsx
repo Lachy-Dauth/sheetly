@@ -217,6 +217,16 @@ export function Toolbar(props: Props) {
         >
           🖌
         </button>
+        <button
+          onClick={() => workbook.createTable(sheet.id, activeRange)}
+          title="Convert the selected range into a table"
+          disabled={
+            activeRange.start.row === activeRange.end.row &&
+            activeRange.start.col === activeRange.end.col
+          }
+        >
+          Table
+        </button>
       </div>
       <div className="group">
         <select

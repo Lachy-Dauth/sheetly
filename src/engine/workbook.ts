@@ -11,6 +11,9 @@ import { StyleTable } from './styles';
 import type { Style } from './styles';
 import { FormulaRuntime } from './runtime';
 import { parseInput } from './parse-input';
+import { TableRegistry, makeTable } from './tables';
+import type { Table, ColumnFilter } from './tables';
+import { applyFilterToSheet } from './table-filters';
 
 export interface NamedRange {
   name: string;
@@ -24,6 +27,7 @@ export class Workbook {
   sheets: Sheet[] = [];
   namedRanges = new Map<string, NamedRange>();
   styles = new StyleTable();
+  tables = new TableRegistry();
   runtime: FormulaRuntime;
 
   private history: Command[] = [];
@@ -124,7 +128,17 @@ export class Workbook {
     const next = parseInput(input);
     const prev = sheet.getCell(address);
     if (!prev && !next) return; // both blank
-    this.apply({ kind: 'setCell', sheetId, address, next, prev });
+    this.batch(() => {
+      this.apply({ kind: 'setCell', sheetId, address, next, prev });
+      if (next) {
+        this.tables.expandIfAdjacent(sheetId, address);
+      }
+      // If the edit fell inside a filtered table, re-evaluate row visibility.
+      const touched = this.tables.findAt(sheetId, address);
+      if (touched && touched.columns.some((c) => c.filter)) {
+        applyFilterToSheet(touched, sheet);
+      }
+    });
   }
 
   setStyle(sheetId: string, range: RangeAddress, patch: Partial<Style>): void {
@@ -174,6 +188,74 @@ export class Workbook {
     const merge = sheet.findMergeAt(a);
     if (!merge) return;
     this.apply({ kind: 'unmerge', sheetId, mergeId: merge.id, range: merge.range });
+  }
+
+  /**
+   * Create a Table from a range. Uses the first row as headers when present.
+   */
+  createTable(sheetId: string, range: RangeAddress, opts: { hasHeader?: boolean; name?: string } = {}): Table {
+    const sheet = this.getSheet(sheetId);
+    const hasHeader = opts.hasHeader ?? true;
+    const headerNames: string[] = [];
+    for (let c = range.start.col; c <= range.end.col; c++) {
+      if (hasHeader) {
+        const cell = sheet.getCell({ row: range.start.row, col: c });
+        const raw = cell?.value ?? cell?.raw;
+        headerNames.push(
+          raw == null || raw === ''
+            ? `Column${c - range.start.col + 1}`
+            : String(raw),
+        );
+      } else {
+        headerNames.push(`Column${c - range.start.col + 1}`);
+      }
+    }
+    const table = makeTable({
+      name: opts.name ?? this.tables.uniqueName(),
+      sheetId,
+      range,
+      headerNames,
+      headerRow: hasHeader,
+    });
+    this.batch(() => {
+      this.apply({ kind: 'addTable', table });
+      if (hasHeader) {
+        this.setStyle(
+          sheetId,
+          {
+            start: { row: range.start.row, col: range.start.col },
+            end: { row: range.start.row, col: range.end.col },
+          },
+          { bold: true, color: '#ffffff', align: 'center' },
+        );
+      }
+    });
+    return table;
+  }
+
+  updateTable(tableId: string, patch: Partial<Table>): void {
+    const current = this.tables.get(tableId);
+    if (!current) return;
+    const prev: Partial<Table> = {};
+    for (const k of Object.keys(patch) as (keyof Table)[]) {
+      (prev as Record<string, unknown>)[k] = current[k];
+    }
+    this.apply({ kind: 'updateTable', tableId, patch, prev });
+    applyFilterToSheet(this.tables.get(tableId)!, this.getSheet(current.sheetId));
+  }
+
+  /** Set or clear the filter on a single column, then re-apply filters. */
+  setColumnFilter(tableId: string, columnIndex: number, filter: ColumnFilter | undefined): void {
+    const t = this.tables.get(tableId);
+    if (!t) return;
+    const nextColumns = t.columns.map((c, i) => (i === columnIndex ? { ...c, filter } : c));
+    this.updateTable(tableId, { columns: nextColumns });
+  }
+
+  removeTable(tableId: string): void {
+    const snapshot = this.tables.get(tableId);
+    if (!snapshot) return;
+    this.apply({ kind: 'removeTable', tableId, snapshot });
   }
 
   addSheet(name?: string): Sheet {
@@ -268,6 +350,25 @@ export class Workbook {
         this.namedRanges.set(cmd.name, { name: cmd.name, ref: cmd.ref });
         return { ...cmd, prev };
       }
+      case 'addTable': {
+        this.tables.add(cmd.table);
+        return cmd;
+      }
+      case 'removeTable': {
+        const snapshot = this.tables.remove(cmd.tableId);
+        return { ...cmd, snapshot };
+      }
+      case 'updateTable': {
+        const t = this.tables.get(cmd.tableId);
+        if (!t) return cmd;
+        const prev: Partial<Table> = {};
+        const tt = t as unknown as Record<string, unknown>;
+        for (const k of Object.keys(cmd.patch) as (keyof Table)[]) {
+          (prev as Record<string, unknown>)[k] = tt[k];
+          tt[k] = (cmd.patch as Record<string, unknown>)[k];
+        }
+        return { ...cmd, prev };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -339,6 +440,14 @@ export class Workbook {
         return { kind: 'setSheetColor', sheetId: cmd.sheetId, color: cmd.prev };
       case 'setName':
         return { kind: 'setName', name: cmd.name, ref: cmd.prev ?? '' };
+      case 'addTable':
+        return { kind: 'removeTable', tableId: cmd.table.id };
+      case 'removeTable':
+        return cmd.snapshot
+          ? { kind: 'addTable', table: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'updateTable':
+        return { kind: 'updateTable', tableId: cmd.tableId, patch: cmd.prev ?? {} };
       case 'composite':
         return {
           kind: 'composite',

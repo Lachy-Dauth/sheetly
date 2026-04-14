@@ -15,6 +15,7 @@ import { parseFormula } from './parse';
 import { lookup as lookupFn } from './registry';
 import type { FnValue } from './registry';
 import { installAllFunctions } from './functions';
+import { resolveStructuredRange } from '../tables';
 
 let installed = false;
 
@@ -50,14 +51,41 @@ export function evaluateAst(ast: AstNode, ctx: EvalContext): FnValue {
       return resolveRangeArray(ctx, ast.sheet, ast.range);
     }
     case 'name': {
+      // First: structured bare reference? Shouldn't happen but be safe.
       const def = ctx.workbook.namedRanges.get(ast.name);
-      if (!def) return makeError('#NAME?', `Unknown name ${ast.name}`);
-      const parsed = parseRef(def.ref);
-      if (!parsed) return makeError('#NAME?');
-      if (parsed.kind === 'cell') {
-        return resolveCellValue(ctx, parsed.sheet, parsed.start);
+      if (def) {
+        const parsed = parseRef(def.ref);
+        if (!parsed) return makeError('#NAME?');
+        if (parsed.kind === 'cell') {
+          return resolveCellValue(ctx, parsed.sheet, parsed.start);
+        }
+        return resolveRangeArray(ctx, parsed.sheet, { start: parsed.start, end: parsed.end });
       }
-      return resolveRangeArray(ctx, parsed.sheet, { start: parsed.start, end: parsed.end });
+      // Maybe this is a bare Table name.
+      const t = ctx.workbook.tables.byNameCI(ast.name);
+      if (t) {
+        return resolveRangeArray(
+          ctx,
+          ctx.workbook.getSheet(t.sheetId).name,
+          { start: { row: t.range.start.row + (t.headerRow ? 1 : 0), col: t.range.start.col }, end: { row: t.range.end.row - (t.totalsRow ? 1 : 0), col: t.range.end.col } },
+        );
+      }
+      return makeError('#NAME?', `Unknown name ${ast.name}`);
+    }
+    case 'struct-ref': {
+      let table = ctx.workbook.tables.byNameCI(ast.table);
+      if (!table && ast.table === '') {
+        // Bare [Col] — find the table containing the current cell.
+        table = ctx.workbook.tables.findAt(ctx.sheetId, ctx.cell);
+      }
+      if (!table) return makeError('#REF!', `Unknown table "${ast.table}"`);
+      const range = resolveStructuredRange(table, ast.specifier, ctx.cell);
+      if (!range) return makeError('#REF!', `Invalid structured reference`);
+      const sheetName = ctx.workbook.getSheet(table.sheetId).name;
+      if (range.start.row === range.end.row && range.start.col === range.end.col) {
+        return resolveCellValue(ctx, sheetName, range.start);
+      }
+      return resolveRangeArray(ctx, sheetName, range);
     }
     case 'unary': {
       const v = evaluateAst(ast.operand, ctx);

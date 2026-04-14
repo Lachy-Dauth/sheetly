@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Workbook } from '../engine/workbook';
 import type { Sheet } from '../engine/sheet';
-import type { Address } from '../engine/address';
+import type { Address, RangeAddress } from '../engine/address';
 import { isFormula } from '../engine/cell';
 import { drawGrid, cellRect } from './draw';
 import { measureColumnWidth } from './draw-cells';
@@ -31,6 +31,7 @@ interface Props {
   sheet: Sheet;
   selection: Address; // legacy prop: active cell
   onSelectionChange: (a: Address) => void;
+  onRangeChange?: (range: RangeAddress) => void;
   onDropFiles: (files: File[]) => void;
   themeId?: ThemeId;
   /** If set, next click applies this styleId to the target (format painter). */
@@ -45,6 +46,7 @@ export function Grid(props: Props) {
     workbook,
     sheet,
     onSelectionChange,
+    onRangeChange,
     onDropFiles,
     themeId = 'light',
     paintStyleId,
@@ -64,6 +66,12 @@ export function Grid(props: Props) {
   useEffect(() => {
     onSelectionChange(sel.active);
   }, [sel.active.row, sel.active.col, onSelectionChange]);
+
+  // Notify parent of the current primary range.
+  useEffect(() => {
+    if (!onRangeChange) return;
+    onRangeChange(primaryRange(sel));
+  }, [sel.primary.anchor.row, sel.primary.anchor.col, sel.primary.end.row, sel.primary.end.col, onRangeChange]);
 
   // Size observer.
   useEffect(() => {

@@ -33,6 +33,7 @@ export type AstNode =
       absEnd: { col: boolean; row: boolean };
     }
   | { kind: 'name'; name: string }
+  | { kind: 'struct-ref'; table: string; specifier: string }
   | { kind: 'unary'; op: UnaryOp; operand: AstNode }
   | { kind: 'binary'; op: BinaryOp; left: AstNode; right: AstNode }
   | { kind: 'call'; name: string; args: AstNode[] }

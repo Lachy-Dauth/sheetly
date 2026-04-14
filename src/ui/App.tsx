@@ -5,13 +5,17 @@ import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import { SheetTabs } from './SheetTabs';
 import { importCsv } from '../io/csv';
-import type { Address } from '../engine/address';
+import type { Address, RangeAddress } from '../engine/address';
 import type { ThemeId } from '../grid/theme';
 
 export function App() {
   const workbook = useMemo(() => Workbook.createDefault(), []);
   const [activeSheetId, setActiveSheetId] = useState(workbook.sheets[0]!.id);
   const [selection, setSelection] = useState<Address>({ row: 0, col: 0 });
+  const [selectionRange, setSelectionRange] = useState<RangeAddress>({
+    start: { row: 0, col: 0 },
+    end: { row: 0, col: 0 },
+  });
   const [themeId, setThemeId] = useState<ThemeId>('light');
   const [paintStyleId, setPaintStyleId] = useState<number | null>(null);
   const [, forceRender] = useState(0);
@@ -38,6 +42,7 @@ export function App() {
         workbook={workbook}
         sheet={sheet}
         selection={selection}
+        selectionRange={selectionRange}
         themeId={themeId}
         onThemeChange={setThemeId}
         painterActive={paintStyleId !== null}
@@ -50,6 +55,7 @@ export function App() {
         sheet={sheet}
         selection={selection}
         onSelectionChange={setSelection}
+        onRangeChange={setSelectionRange}
         onDropFiles={(files) => files[0] && onFile(files[0])}
         themeId={themeId}
         paintStyleId={paintStyleId}

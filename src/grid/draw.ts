@@ -10,6 +10,7 @@ import { HEADER_H, HEADER_W } from './layout';
 import { allRanges } from './selection';
 import { drawCells } from './draw-cells';
 import { drawHeaders, drawFrozenLines } from './draw-headers';
+import { drawTableFills, drawTableOutlines } from './draw-tables';
 import type { DrawCtx } from './theme';
 import { LIGHT_THEME } from './theme';
 
@@ -22,7 +23,9 @@ export function drawGrid(d: DrawCtx): void {
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, viewport.width, viewport.height);
 
+  drawTableFills(d);
   drawCells(d);
+  drawTableOutlines(d);
   drawSelection(d);
   drawHeaders(d);
   drawFrozenLines(d);
