@@ -269,3 +269,34 @@ describe('formula: error in name', () => {
     if (isErrorValue(v)) expect(v.code).toBe('#NAME?');
   });
 });
+
+describe('formula: datetime', () => {
+  it('WEEKNUM honours mode (Sun vs Mon start)', () => {
+    // 2024-01-01 is a Monday.
+    expect(eval$('=WEEKNUM(DATE(2024,1,1))')).toBe(1);
+    // Mode 1: Sunday is week boundary, so the Sunday before (2023-12-31) starts week 1.
+    // Jan 7 (Sun) starts week 2 → Jan 8 (Mon) is week 2.
+    expect(eval$('=WEEKNUM(DATE(2024,1,8),1)')).toBe(2);
+    // Mode 2: Monday is week boundary, so Jan 1 (Mon) starts week 1; Jan 8 starts week 2.
+    expect(eval$('=WEEKNUM(DATE(2024,1,8),2)')).toBe(2);
+    // ISO week (mode 21): 2024-01-01 (Mon) starts ISO week 1.
+    expect(eval$('=WEEKNUM(DATE(2024,1,1),21)')).toBe(1);
+    // 2023-01-01 (Sun) is in ISO week 52 of 2022.
+    expect(eval$('=WEEKNUM(DATE(2023,1,1),21)')).toBe(52);
+  });
+  it('NETWORKDAYS returns negative when end < start', () => {
+    // 2024-01-01 (Mon) to 2024-01-05 (Fri) = 5 working days.
+    expect(eval$('=NETWORKDAYS(DATE(2024,1,1),DATE(2024,1,5))')).toBe(5);
+    // Reversed should be -5.
+    expect(eval$('=NETWORKDAYS(DATE(2024,1,5),DATE(2024,1,1))')).toBe(-5);
+  });
+  it('DATEDIF returns #NUM! when end < start, and supports YM/YD/MD', () => {
+    const v = eval$('=DATEDIF(DATE(2024,6,1),DATE(2024,5,1),"D")');
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#NUM!');
+    // YM: months ignoring years.
+    expect(eval$('=DATEDIF(DATE(2020,3,15),DATE(2024,9,20),"YM")')).toBe(6);
+    // MD: days ignoring months & years.
+    expect(eval$('=DATEDIF(DATE(2020,3,15),DATE(2024,9,20),"MD")')).toBe(5);
+  });
+});
