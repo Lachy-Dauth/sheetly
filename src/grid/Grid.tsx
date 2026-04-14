@@ -202,7 +202,7 @@ export function Grid(props: Props) {
     onPaintComplete?.();
   };
 
-  const onMouseDown = (e: React.MouseEvent) => {
+  const onPointerDown = (e: React.PointerEvent) => {
     const hit = hitTest(e.clientX, e.clientY);
     // While the formula editor is open, clicking on the canvas inserts a cell
     // reference into the formula at the cursor (Excel-style range picker).
@@ -213,11 +213,24 @@ export function Grid(props: Props) {
       setEditing({ a: editing.a, value: next.text, caret: next.caret });
       setRefPick({ start: a, end: a });
       dragRef.current = { mode: 'pick-ref', pickAnchor: a };
+      // Capture so subsequent move/up fire even when the cursor leaves the canvas.
+      try {
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* ignore */
+      }
       e.preventDefault();
       return;
     }
     // Ensure the grid container captures subsequent keyboard / clipboard events.
     outerRef.current?.focus();
+    // Capture the pointer so move/up keep firing even if the cursor leaves
+    // the canvas — otherwise drags get "stuck" mid-resize.
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     if (hit.zone === 'fill-handle') {
       dragRef.current = { mode: 'fill', fillSource: primaryRange(sel) };
       setFillPreview(null);
@@ -269,7 +282,7 @@ export function Grid(props: Props) {
     }
   };
 
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current;
     if (
       drag.mode === 'resize-col' &&
@@ -332,7 +345,12 @@ export function Grid(props: Props) {
     }
   };
 
-  const onMouseUp = (e: React.MouseEvent) => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    try {
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     const drag = dragRef.current;
     if (
       drag.mode === 'resize-col' &&
@@ -597,9 +615,10 @@ export function Grid(props: Props) {
         ref={canvasRef}
         className="grid-canvas"
         onWheel={onWheel}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onDoubleClick={onDblClick}
       />
       {editing && editorPos && (

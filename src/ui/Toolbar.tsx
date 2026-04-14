@@ -28,6 +28,8 @@ interface Props {
   onOpenPivots: () => void;
   onToggleComments: () => void;
   onPrint: () => void;
+  onPrintCharts: () => void;
+  onDownloadCharts: () => void;
   onExportBundle: () => void;
   onToggleProtection: () => void;
 }
@@ -49,6 +51,8 @@ export function Toolbar(props: Props) {
     onOpenPivots,
     onToggleComments,
     onPrint,
+    onPrintCharts,
+    onDownloadCharts,
     onExportBundle,
     onToggleProtection,
   } = props;
@@ -111,8 +115,22 @@ export function Toolbar(props: Props) {
         >
           JSON
         </button>
-        <button onClick={onPrint} title="Print / Save as PDF">
+        <button onClick={onPrint} title="Print / Save as PDF (sheet + charts)">
           PDF
+        </button>
+        <button
+          onClick={onPrintCharts}
+          title="Print / Save just the charts on this sheet as PDF"
+          disabled={sheet.charts.length === 0}
+        >
+          PDF charts
+        </button>
+        <button
+          onClick={onDownloadCharts}
+          title="Download every chart on this sheet as an SVG file"
+          disabled={sheet.charts.length === 0}
+        >
+          SVG charts
         </button>
         <button onClick={onExportBundle} title="Export a read-only HTML bundle">
           Share
