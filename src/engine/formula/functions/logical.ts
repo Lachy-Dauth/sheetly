@@ -23,31 +23,36 @@ export function installLogical(): void {
         seen = true;
       }
     }
-    return seen;
+    // Excel returns #VALUE! when no logical values are supplied.
+    return seen ? true : makeError('#VALUE!');
   });
 
   register('OR', (args) => {
+    let seen = false;
     for (const a of args) {
       for (const v of iterScalars(a)) {
         if (isErrorValue(v)) return v;
         const b = toBool(v);
         if (isErrorValue(b)) return b;
         if (b) return true;
+        seen = true;
       }
     }
-    return false;
+    return seen ? false : makeError('#VALUE!');
   });
 
   register('XOR', (args) => {
     let count = 0;
+    let seen = false;
     for (const a of args) {
       for (const v of iterScalars(a)) {
         const b = toBool(v);
         if (isErrorValue(b)) return b;
         if (b) count++;
+        seen = true;
       }
     }
-    return count % 2 === 1;
+    return seen ? count % 2 === 1 : makeError('#VALUE!');
   });
 
   register('IF', (args) => {

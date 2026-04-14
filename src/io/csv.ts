@@ -98,8 +98,8 @@ export function serializeSheetCsv(sheet: Sheet, options: ExportOptions = {}): st
         continue;
       }
       const v = options.computed === false
-        ? (typeof cell.raw === 'string' ? cell.raw : cell.raw)
-        : cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+        ? cell.raw
+        : cell.computed ?? cell.value ?? cell.raw;
       const text = toText(v ?? null);
       row.push(options.quoteAll ? `"${text.replace(/"/g, '""')}"` : escapeField(text, delim));
     }

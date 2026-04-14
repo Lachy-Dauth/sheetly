@@ -138,6 +138,16 @@ describe('formula: logical', () => {
     expect(eval$('=IFERROR(1/0,"oops")')).toBe('oops');
     expect(eval$('=IFERROR(1/1,"oops")')).toBe(1);
   });
+  it('AND/OR/XOR with no logical args return #VALUE!', () => {
+    // Excel returns #VALUE! when AND/OR/XOR receive no logical arguments.
+    const a = eval$('=AND()');
+    expect(isErrorValue(a)).toBe(true);
+    if (isErrorValue(a)) expect(a.code).toBe('#VALUE!');
+    const o = eval$('=OR()');
+    expect(isErrorValue(o)).toBe(true);
+    const x = eval$('=XOR()');
+    expect(isErrorValue(x)).toBe(true);
+  });
 });
 
 describe('formula: lookup', () => {
@@ -159,6 +169,33 @@ describe('formula: lookup', () => {
     w.setCellFromInput(s.id, { row: 0, col: 3 }, '=INDEX(B1:B3,MATCH(2,A1:A3,0))');
     expect(s.getCell({ row: 0, col: 3 })?.computed).toBe('val1');
   });
+  it('XMATCH honours match_mode and search_mode', () => {
+    const { w, s } = wb();
+    [10, 20, 30, 40, 50].forEach((v, r) => {
+      w.setCellFromInput(s.id, { row: r, col: 0 }, String(v));
+    });
+    // Exact match (default).
+    w.setCellFromInput(s.id, { row: 0, col: 2 }, '=XMATCH(30,A1:A5)');
+    expect(s.getCell({ row: 0, col: 2 })?.computed).toBe(3);
+    // match_mode = -1: exact or next smaller.
+    w.setCellFromInput(s.id, { row: 1, col: 2 }, '=XMATCH(35,A1:A5,-1)');
+    expect(s.getCell({ row: 1, col: 2 })?.computed).toBe(3);
+    // match_mode = 1: exact or next larger.
+    w.setCellFromInput(s.id, { row: 2, col: 2 }, '=XMATCH(35,A1:A5,1)');
+    expect(s.getCell({ row: 2, col: 2 })?.computed).toBe(4);
+    // search_mode = -1: search last-to-first; finding duplicates returns the last.
+    w.setCellFromInput(s.id, { row: 5, col: 0 }, '30');
+    w.setCellFromInput(s.id, { row: 3, col: 2 }, '=XMATCH(30,A1:A6,0,-1)');
+    expect(s.getCell({ row: 3, col: 2 })?.computed).toBe(6);
+  });
+  it('XMATCH wildcard mode', () => {
+    const { w, s } = wb();
+    ['apple', 'banana', 'cherry'].forEach((v, r) => {
+      w.setCellFromInput(s.id, { row: r, col: 0 }, v);
+    });
+    w.setCellFromInput(s.id, { row: 0, col: 2 }, '=XMATCH("ban*",A1:A3,2)');
+    expect(s.getCell({ row: 0, col: 2 })?.computed).toBe(2);
+  });
 });
 
 describe('formula: info', () => {
@@ -166,6 +203,19 @@ describe('formula: info', () => {
     expect(eval$('=ISNUMBER(5)')).toBe(true);
     expect(eval$('=ISTEXT("x")')).toBe(true);
     expect(eval$('=ISBLANK(A1)')).toBe(true);
+  });
+});
+
+describe('formula: named ranges', () => {
+  it('recalculates dependent formulas when underlying cell changes', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '5');
+    w.setName('Foo', 'A1');
+    w.setCellFromInput(s.id, { row: 0, col: 1 }, '=Foo*2');
+    expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(10);
+    // Update A1 — formula referencing the named range should recalc.
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '7');
+    expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(14);
   });
 });
 
