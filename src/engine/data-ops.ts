@@ -28,17 +28,19 @@ export interface FindMatch {
   end: number;
 }
 
-/** Build a matching test function from the user-facing options. */
-function compileMatcher(opts: FindOptions): (text: string) => FindMatch['start'][] {
+type RawMatch = { start: number; end: number };
+
+/** Build a matching function returning start/end offsets for each hit. */
+function compileMatcher(opts: FindOptions): (text: string) => RawMatch[] {
   const flags = (opts.caseSensitive ? '' : 'i') + 'g';
   if (opts.regex) {
     const re = new RegExp(opts.pattern, flags);
     return (text) => {
-      const out: number[] = [];
+      const out: RawMatch[] = [];
       let m: RegExpExecArray | null;
       re.lastIndex = 0;
       while ((m = re.exec(text)) !== null) {
-        out.push(m.index);
+        out.push({ start: m.index, end: m.index + m[0].length });
         // Guard against zero-width matches.
         if (m.index === re.lastIndex) re.lastIndex++;
       }
@@ -48,12 +50,13 @@ function compileMatcher(opts: FindOptions): (text: string) => FindMatch['start']
   const needle = opts.caseSensitive ? opts.pattern : opts.pattern.toLowerCase();
   return (text) => {
     const hay = opts.caseSensitive ? text : text.toLowerCase();
-    if (opts.wholeCell) return hay === needle ? [0] : [];
-    const out: number[] = [];
+    if (opts.wholeCell) return hay === needle ? [{ start: 0, end: text.length }] : [];
+    if (needle === '') return [];
+    const out: RawMatch[] = [];
     let i = 0;
     while ((i = hay.indexOf(needle, i)) !== -1) {
-      out.push(i);
-      i += needle.length || 1;
+      out.push({ start: i, end: i + needle.length });
+      i += needle.length;
     }
     return out;
   };
@@ -77,9 +80,8 @@ export function findAll(sheet: Sheet, opts: FindOptions): FindMatch[] {
     if (range && (row < range.start.row || row > range.end.row || col < range.start.col || col > range.end.col)) continue;
     const text = cellRawText(cell);
     if (!text) continue;
-    const positions = matcher(text);
-    for (const pos of positions) {
-      matches.push({ address: { row, col }, text, start: pos, end: pos + (opts.regex ? 0 : opts.pattern.length) });
+    for (const m of matcher(text)) {
+      matches.push({ address: { row, col }, text, start: m.start, end: m.end });
     }
   }
   return matches;
@@ -95,7 +97,6 @@ export interface ReplaceOptions extends FindOptions {
  */
 export function replaceAll(workbook: Workbook, sheet: Sheet, opts: ReplaceOptions): number {
   const flags = (opts.caseSensitive ? '' : 'i') + 'g';
-  const replacer = opts.regex ? new RegExp(opts.pattern, flags) : null;
   const range = opts.range ? normalizeRange(opts.range) : undefined;
   const changes: Array<{ address: Address; next: Cell | undefined; prev: Cell | undefined }> = [];
   for (const [key, cell] of sheet.cells) {
@@ -109,8 +110,9 @@ export function replaceAll(workbook: Workbook, sheet: Sheet, opts: ReplaceOption
       const hit = opts.caseSensitive ? text === opts.pattern : text.toLowerCase() === opts.pattern.toLowerCase();
       if (!hit) continue;
       replaced = opts.replacement;
-    } else if (replacer) {
-      if (!replacer.test(text)) continue;
+    } else if (opts.regex) {
+      // Fresh RegExp per cell: `g`-flag regexes are stateful, so reusing one
+      // across cells would skip matches beyond the stale lastIndex.
       replaced = text.replace(new RegExp(opts.pattern, flags), opts.replacement);
     } else {
       const needle = opts.caseSensitive ? opts.pattern : opts.pattern.toLowerCase();

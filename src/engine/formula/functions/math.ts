@@ -126,12 +126,16 @@ export function installMath(): void {
     const range = args[0]!;
     const criterion = args[1]!;
     const sumRange = args[2] ?? range;
-    const vals = [...iterScalars(range)];
-    const sumVals = [...iterScalars(sumRange)];
+    // `includeBlank` keeps both arrays aligned when the two ranges contain
+    // blanks at different positions. Without this, the i-th criterion could
+    // pair up with the wrong sum cell.
+    const vals = [...iterScalars(range, { includeBlank: true })];
+    const sumVals = [...iterScalars(sumRange, { includeBlank: true })];
+    const len = Math.min(vals.length, sumVals.length);
     let total = 0;
-    for (let i = 0; i < vals.length; i++) {
+    for (let i = 0; i < len; i++) {
       if (matches(vals[i] ?? null, criterion)) {
-        const v = sumVals[i] ?? 0;
+        const v = sumVals[i];
         if (typeof v === 'number') total += v;
       }
     }

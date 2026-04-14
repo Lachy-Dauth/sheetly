@@ -94,6 +94,30 @@ describe('formula: math functions', () => {
     w.setCellFromInput(s.id, { row: 0, col: 1 }, '=SUMIF(A1:A5,">2")');
     expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(12);
   });
+  it('SUMIF keeps criterion/sum ranges aligned when blanks differ', () => {
+    // Regression: without `includeBlank`, iterScalars dropped blanks and the
+    // i-th criterion would line up against the wrong sum cell.
+    const { w, s } = wb();
+    // A: [5, blank, 10]   B: [blank, 20, 30]
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '5');
+    w.setCellFromInput(s.id, { row: 2, col: 0 }, '10');
+    w.setCellFromInput(s.id, { row: 1, col: 1 }, '20');
+    w.setCellFromInput(s.id, { row: 2, col: 1 }, '30');
+    w.setCellFromInput(s.id, { row: 0, col: 2 }, '=SUMIF(A1:A3,">0",B1:B3)');
+    // Only row 3 has both A>0 and a number in B → 30.
+    expect(s.getCell({ row: 0, col: 2 })?.computed).toBe(30);
+  });
+  it('TREND returns the predicted y for a single new x', () => {
+    // Perfect line y = 2x + 1; TREND at x=5 should give 11.
+    const { w, s } = wb();
+    for (let r = 0; r < 4; r++) {
+      w.setCellFromInput(s.id, { row: r, col: 0 }, String(r + 1));
+      w.setCellFromInput(s.id, { row: r, col: 1 }, String(2 * (r + 1) + 1));
+    }
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=TREND(B1:B4,A1:A4,5)');
+    const v = s.getCell({ row: 0, col: 3 })?.computed;
+    expect(typeof v === 'number' ? v : NaN).toBeCloseTo(11, 8);
+  });
   it('MIN/MAX/MEDIAN', () => {
     const { w, s } = wb();
     [5, 3, 8, 1, 4].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, String(v)));

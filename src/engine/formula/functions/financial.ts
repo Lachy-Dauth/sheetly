@@ -74,7 +74,7 @@ export function installFinancial(): void {
     const pv = asNumber(args[2] ?? 0);
     const fv = args.length > 3 ? asNumber(args[3]!) : 0;
     const type = args.length > 4 ? asNumber(args[4]!) : 0;
-    let guess = args.length > 5 ? asNumber(args[5]!) : 0.1;
+    const guess = args.length > 5 ? asNumber(args[5]!) : 0.1;
     if (anyErr(n, pmtAmt, pv, fv, type, guess)) return makeError('#VALUE!');
     let r = guess as number;
     for (let i = 0; i < 50; i++) {
@@ -99,7 +99,7 @@ export function installFinancial(): void {
 
   register('IRR', (args) => {
     const { nums } = flattenNumbers([args[0]!]);
-    let guess = args.length > 1 ? asNumber(args[1]!) : 0.1;
+    const guess = args.length > 1 ? asNumber(args[1]!) : 0.1;
     if (typeof guess !== 'number') return guess;
     let r = guess;
     for (let i = 0; i < 100; i++) {

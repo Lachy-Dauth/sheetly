@@ -77,7 +77,7 @@ function formatNumber(n: number, fmt: string): string {
 
   const neg = n < 0;
   const abs = Math.abs(n);
-  let fixed = abs.toFixed(fracMax);
+  const fixed = abs.toFixed(fracMax);
   let [whole, decimals = ''] = fixed.split('.');
   // Trim trailing zeros down to fracZeros minimum.
   while (decimals.length > fracZeros && decimals.endsWith('0')) {

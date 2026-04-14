@@ -49,6 +49,29 @@ describe('find & replace', () => {
     w.undo();
     expect(s.getCell({ row: 0, col: 0 })?.raw).toBe('red car');
   });
+
+  it('replaceAll with regex handles multiple cells correctly', () => {
+    // Regression test: using a `g`-flag RegExp across cells via .test() used
+    // to advance lastIndex between iterations, causing later cells to miss
+    // matches that the prior call had already scanned past.
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, 'abc123');
+    w.setCellFromInput(s.id, { row: 1, col: 0 }, 'xy');
+    w.setCellFromInput(s.id, { row: 2, col: 0 }, 'xyz456');
+    const count = replaceAll(w, s, { pattern: '\\d+', regex: true, replacement: '#' });
+    expect(count).toBe(2);
+    expect(s.getCell({ row: 0, col: 0 })?.raw).toBe('abc#');
+    expect(s.getCell({ row: 2, col: 0 })?.raw).toBe('xyz#');
+  });
+
+  it('findAll reports full match length for regex hits', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, 'foo_1234_bar');
+    const hits = findAll(s, { pattern: '\\d+', regex: true });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.start).toBe(4);
+    expect(hits[0]!.end).toBe(8);
+  });
 });
 
 describe('sort', () => {

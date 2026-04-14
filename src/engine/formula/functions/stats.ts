@@ -104,9 +104,10 @@ export function installStats(): void {
     const avgRange = args[2] ?? range;
     const vals = flatScalarList(range);
     const avgVals = flatScalarList(avgRange);
+    const len = Math.min(vals.length, avgVals.length);
     let sum = 0;
     let n = 0;
-    for (let i = 0; i < vals.length; i++) {
+    for (let i = 0; i < len; i++) {
       if (matches(vals[i] ?? null, crit)) {
         const v = avgVals[i];
         if (typeof v === 'number') {
@@ -201,7 +202,34 @@ export function installStats(): void {
     if (typeof slope !== 'number' || typeof intercept !== 'number') return makeError('#N/A');
     return intercept + slope * x;
   });
-  register('TREND', (args) => regression([args[0]!, args[1]!], 'slope'));
+  register('TREND', (args) => {
+    // TREND(known_y, [known_x], [new_x]) — returns predicted y values along
+    // the least-squares line fit through (known_x, known_y). When new_x is
+    // omitted, the fitted values at known_x are returned. Spills as a 1-D
+    // column so single-cell callers still see the first prediction.
+    const ys = flattenNumbers([args[0]!]).nums;
+    const xsRaw = args.length > 1 ? flattenNumbers([args[1]!]).nums : ys.map((_, i) => i + 1);
+    const len = Math.min(ys.length, xsRaw.length);
+    if (len < 2) return makeError('#DIV/0!');
+    const xs = xsRaw.slice(0, len);
+    const ysT = ys.slice(0, len);
+    const mx = xs.reduce((a, b) => a + b, 0) / len;
+    const my = ysT.reduce((a, b) => a + b, 0) / len;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < len; i++) {
+      num += (xs[i]! - mx) * (ysT[i]! - my);
+      den += (xs[i]! - mx) * (xs[i]! - mx);
+    }
+    if (den === 0) return makeError('#DIV/0!');
+    const slope = num / den;
+    const intercept = my - slope * mx;
+    const target = args.length > 2 ? flattenNumbers([args[2]!]).nums : xs;
+    const out: number[][] = target.map((x) => [intercept + slope * x]);
+    if (out.length === 0) return makeError('#N/A');
+    if (out.length === 1) return out[0]![0]!;
+    return out;
+  });
 }
 
 function stdev(args: any[], sample: boolean) {

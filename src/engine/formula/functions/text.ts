@@ -55,7 +55,11 @@ export function installText(): void {
       .replace(/(^|\W)([a-z])/g, (_m, p, c) => p + c.toUpperCase()),
   );
   register('TRIM', (args) => asText(args[0] ?? '').trim().replace(/\s+/g, ' '));
-  register('CLEAN', (args) => asText(args[0] ?? '').replace(/[\x00-\x1F]/g, ''));
+  register('CLEAN', (args) =>
+    // Excel's CLEAN removes non-printable ASCII control characters (0-31).
+    // eslint-disable-next-line no-control-regex
+    asText(args[0] ?? '').replace(/[\x00-\x1F]/g, ''),
+  );
 
   register('SUBSTITUTE', (args) => {
     const s = asText(args[0] ?? '');
