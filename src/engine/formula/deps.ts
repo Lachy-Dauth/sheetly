@@ -6,6 +6,7 @@
 import type { AstNode } from './ast';
 import type { Workbook } from '../workbook';
 import type { Address } from '../address';
+import { parseRef } from '../address';
 import { resolveStructuredRange } from '../tables';
 
 export interface Dependency {
@@ -35,8 +36,44 @@ function visit(
 ): void {
   switch (node.kind) {
     case 'literal':
-    case 'name':
       return;
+    case 'name': {
+      // A defined name resolves to a cell or range — track its target cells so
+      // the formula recalculates when the underlying data changes. Bare table
+      // names (handled in eval) resolve via tables.byNameCI; we expand them too.
+      const named = wb.namedRanges.get(node.name);
+      if (named) {
+        const parsed = parseRef(named.ref);
+        if (!parsed) return;
+        const sheetId = parsed.sheet ? wb.sheetByName(parsed.sheet)?.id : curSheet;
+        if (!sheetId) return;
+        const startRow = parsed.start.row;
+        const endRow = parsed.kind === 'cell' ? parsed.start.row : parsed.end.row;
+        const startCol = parsed.start.col;
+        const endCol = parsed.kind === 'cell' ? parsed.start.col : parsed.end.col;
+        const size = (endRow - startRow + 1) * (endCol - startCol + 1);
+        if (size > MAX_RANGE_EXPANSION) return;
+        for (let row = startRow; row <= endRow; row++) {
+          for (let col = startCol; col <= endCol; col++) {
+            out.push({ sheetId, address: { row, col } });
+          }
+        }
+        return;
+      }
+      const table = wb.tables.byNameCI(node.name);
+      if (table) {
+        const start = { row: table.range.start.row + (table.headerRow ? 1 : 0), col: table.range.start.col };
+        const end = { row: table.range.end.row - (table.totalsRow ? 1 : 0), col: table.range.end.col };
+        const size = (end.row - start.row + 1) * (end.col - start.col + 1);
+        if (size > MAX_RANGE_EXPANSION) return;
+        for (let row = start.row; row <= end.row; row++) {
+          for (let col = start.col; col <= end.col; col++) {
+            out.push({ sheetId: table.sheetId, address: { row, col } });
+          }
+        }
+      }
+      return;
+    }
     case 'struct-ref': {
       let table = wb.tables.byNameCI(node.table);
       if (!table && node.table === '' && curCell) table = wb.tables.findAt(curSheet, curCell);
