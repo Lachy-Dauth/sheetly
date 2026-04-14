@@ -61,6 +61,9 @@ export function installText(): void {
     const s = asText(args[0] ?? '');
     const find = asText(args[1] ?? '');
     const rep = asText(args[2] ?? '');
+    // `find` being empty would cause indexOf(..., idx) to return idx forever,
+    // so short-circuit to match Excel's "no change" behaviour.
+    if (find === '') return s;
     if (args.length > 3) {
       const n = asNumber(args[3]!);
       if (typeof n !== 'number') return n;
@@ -83,7 +86,6 @@ export function installText(): void {
       }
       return out;
     }
-    if (find === '') return s;
     return s.split(find).join(rep);
   });
 

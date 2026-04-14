@@ -58,7 +58,13 @@ export function Grid(props: Props) {
   const [scroll, setScroll] = useState({ x: 0, y: 0 });
   const [sel, setSel] = useState<Selection>(() => cellSelection(props.selection));
   const [editing, setEditing] = useState<{ a: Address; value: string } | null>(null);
-  const dragRef = useRef<{ mode: DragMode; startCol?: number; startRow?: number; origin?: number }>({
+  const dragRef = useRef<{
+    mode: DragMode;
+    startCol?: number;
+    startRow?: number;
+    origin?: number;
+    baseSize?: number;
+  }>({
     mode: null,
   });
 
@@ -162,11 +168,21 @@ export function Grid(props: Props) {
   const onMouseDown = (e: React.MouseEvent) => {
     const hit = hitTest(e.clientX, e.clientY);
     if (hit.zone === 'col-header' && hit.onHandle) {
-      dragRef.current = { mode: 'resize-col', startCol: hit.col, origin: e.clientX };
+      dragRef.current = {
+        mode: 'resize-col',
+        startCol: hit.col,
+        origin: e.clientX,
+        baseSize: sheet.colWidth(hit.col),
+      };
       return;
     }
     if (hit.zone === 'row-header' && hit.onHandle) {
-      dragRef.current = { mode: 'resize-row', startRow: hit.row, origin: e.clientY };
+      dragRef.current = {
+        mode: 'resize-row',
+        startRow: hit.row,
+        origin: e.clientY,
+        baseSize: sheet.rowHeight(hit.row),
+      };
       return;
     }
     if (hit.zone === 'col-header') {
@@ -199,16 +215,24 @@ export function Grid(props: Props) {
 
   const onMouseMove = (e: React.MouseEvent) => {
     const drag = dragRef.current;
-    if (drag.mode === 'resize-col' && drag.startCol !== undefined && drag.origin !== undefined) {
+    if (
+      drag.mode === 'resize-col' &&
+      drag.startCol !== undefined &&
+      drag.origin !== undefined &&
+      drag.baseSize !== undefined
+    ) {
       const delta = e.clientX - drag.origin;
-      const base = sheet.colWidth(drag.startCol);
-      const width = Math.max(16, base + delta);
+      const width = Math.max(16, drag.baseSize + delta);
       sheet.setColWidth(drag.startCol, width);
       draw();
-    } else if (drag.mode === 'resize-row' && drag.startRow !== undefined && drag.origin !== undefined) {
+    } else if (
+      drag.mode === 'resize-row' &&
+      drag.startRow !== undefined &&
+      drag.origin !== undefined &&
+      drag.baseSize !== undefined
+    ) {
       const delta = e.clientY - drag.origin;
-      const base = sheet.rowHeight(drag.startRow);
-      const height = Math.max(8, base + delta);
+      const height = Math.max(8, drag.baseSize + delta);
       sheet.setRowHeight(drag.startRow, height);
       draw();
     } else if (drag.mode === 'select') {
@@ -232,27 +256,37 @@ export function Grid(props: Props) {
 
   const onMouseUp = (e: React.MouseEvent) => {
     const drag = dragRef.current;
-    if (drag.mode === 'resize-col' && drag.startCol !== undefined && drag.origin !== undefined) {
+    if (
+      drag.mode === 'resize-col' &&
+      drag.startCol !== undefined &&
+      drag.origin !== undefined &&
+      drag.baseSize !== undefined
+    ) {
       const delta = e.clientX - drag.origin;
-      const base = sheet.colWidth(drag.startCol);
-      // Undo the direct mutation, then re-apply via command for history.
-      sheet.setColWidth(drag.startCol, base - delta);
+      const finalWidth = Math.max(16, drag.baseSize + delta);
+      // Restore the pre-drag width, then apply via command so undo has the right prev.
+      sheet.setColWidth(drag.startCol, drag.baseSize);
       workbook.apply({
         kind: 'resizeCol',
         sheetId: sheet.id,
         col: drag.startCol,
-        width: Math.max(16, base),
+        width: finalWidth,
       });
     }
-    if (drag.mode === 'resize-row' && drag.startRow !== undefined && drag.origin !== undefined) {
+    if (
+      drag.mode === 'resize-row' &&
+      drag.startRow !== undefined &&
+      drag.origin !== undefined &&
+      drag.baseSize !== undefined
+    ) {
       const delta = e.clientY - drag.origin;
-      const base = sheet.rowHeight(drag.startRow);
-      sheet.setRowHeight(drag.startRow, base - delta);
+      const finalHeight = Math.max(8, drag.baseSize + delta);
+      sheet.setRowHeight(drag.startRow, drag.baseSize);
       workbook.apply({
         kind: 'resizeRow',
         sheetId: sheet.id,
         row: drag.startRow,
-        height: Math.max(8, base),
+        height: finalHeight,
       });
     }
     if (drag.mode === 'select' && paintStyleId != null) {
@@ -376,27 +410,39 @@ export function Grid(props: Props) {
           e.preventDefault();
         }
     }
-    // Keep active cell visible.
-    scrollIntoView(sel.active);
+    // Active-cell auto-scroll is handled by the effect below, which observes the
+    // committed state. Calling scrollIntoView inline here would use the stale
+    // `sel` (setSel is async), so the viewport would lag one keystroke behind.
   };
 
-  const scrollIntoView = (a: Address) => {
-    const x = columnX(sheet, a.col);
-    const w = sheet.colWidth(a.col);
-    const y = rowY(sheet, a.row);
-    const h = sheet.rowHeight(a.row);
-    setScroll((s) => {
-      let sx = s.x;
-      let sy = s.y;
-      const vw = viewport.width - HEADER_W;
-      const vh = viewport.height - HEADER_H;
-      if (x < sx) sx = x;
-      else if (x + w > sx + vw) sx = x + w - vw;
-      if (y < sy) sy = y;
-      else if (y + h > sy + vh) sy = y + h - vh;
-      return { x: sx, y: sy };
-    });
-  };
+  const scrollIntoView = useCallback(
+    (a: Address) => {
+      const x = columnX(sheet, a.col);
+      const w = sheet.colWidth(a.col);
+      const y = rowY(sheet, a.row);
+      const h = sheet.rowHeight(a.row);
+      setScroll((s) => {
+        let sx = s.x;
+        let sy = s.y;
+        const vw = viewport.width - HEADER_W;
+        const vh = viewport.height - HEADER_H;
+        if (x < sx) sx = x;
+        else if (x + w > sx + vw) sx = x + w - vw;
+        if (y < sy) sy = y;
+        else if (y + h > sy + vh) sy = y + h - vh;
+        if (sx === s.x && sy === s.y) return s;
+        return { x: sx, y: sy };
+      });
+    },
+    [sheet, viewport.width, viewport.height],
+  );
+
+  useEffect(() => {
+    scrollIntoView(sel.active);
+    // Only scroll when the active cell changes. viewport resizes are intentionally
+    // ignored so resizing the window doesn't fight the user's scroll position.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel.active.row, sel.active.col]);
 
   // --- cell editor overlay --------------------------------------------
 

@@ -18,9 +18,20 @@ const PRESETS: Array<{ label: string; patch: Partial<Style> }> = [
     label: 'All',
     patch: { border: { top: thin, bottom: thin, left: thin, right: thin } },
   },
+  // NOTE: true "outer only" would require per-cell logic on the range edges,
+  // which setStyle can't express in a single patch. Until we wire that up, this
+  // preset applies a thick perimeter-style border to every cell in the range —
+  // distinct from "All" (thin) so the menu entries aren't duplicates.
   {
     label: 'Outer',
-    patch: { border: { top: thin, bottom: thin, left: thin, right: thin } },
+    patch: {
+      border: {
+        top: { style: 'medium', color: '#1f2328' },
+        bottom: { style: 'medium', color: '#1f2328' },
+        left: { style: 'medium', color: '#1f2328' },
+        right: { style: 'medium', color: '#1f2328' },
+      },
+    },
   },
   { label: 'Top', patch: { border: { top: thin } } },
   { label: 'Bottom', patch: { border: { bottom: thin } } },
