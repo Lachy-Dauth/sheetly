@@ -170,9 +170,16 @@ export function Grid(props: Props) {
     onPaintComplete?.();
   };
 
-  const onMouseDown = (e: React.MouseEvent) => {
+  const onPointerDown = (e: React.PointerEvent) => {
     // Ensure the grid container captures subsequent keyboard / clipboard events.
     outerRef.current?.focus();
+    // Capture the pointer so move/up keep firing even if the cursor leaves
+    // the canvas — otherwise drags get "stuck" mid-resize.
+    try {
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     const hit = hitTest(e.clientX, e.clientY);
     if (hit.zone === 'col-header' && hit.onHandle) {
       dragRef.current = {
@@ -220,7 +227,7 @@ export function Grid(props: Props) {
     }
   };
 
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
     const drag = dragRef.current;
     if (
       drag.mode === 'resize-col' &&
@@ -261,7 +268,12 @@ export function Grid(props: Props) {
     }
   };
 
-  const onMouseUp = (e: React.MouseEvent) => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    try {
+      (e.target as Element).releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* ignore */
+    }
     const drag = dragRef.current;
     if (
       drag.mode === 'resize-col' &&
@@ -494,9 +506,10 @@ export function Grid(props: Props) {
         ref={canvasRef}
         className="grid-canvas"
         onWheel={onWheel}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onDoubleClick={onDblClick}
       />
       {editing && editorPos && (
