@@ -45,4 +45,33 @@ describe('Workbook', () => {
     wb.undo();
     expect(wb.sheets).toHaveLength(1);
   });
+
+  it('preserves cell styling when writing a new value', () => {
+    const wb = Workbook.createDefault();
+    const s = wb.sheets[0]!;
+    wb.setStyle(s.id, { start: { row: 0, col: 0 }, end: { row: 0, col: 0 } }, { bold: true });
+    const styleId = s.getCell({ row: 0, col: 0 })?.styleId;
+    expect(styleId).toBeDefined();
+    wb.setCellFromInput(s.id, { row: 0, col: 0 }, 'hello');
+    const cell = s.getCell({ row: 0, col: 0 });
+    expect(cell?.raw).toBe('hello');
+    expect(cell?.styleId).toBe(styleId);
+    expect(wb.styles.get(cell!.styleId!)).toMatchObject({ bold: true });
+  });
+
+  it('preserves styling when clearing a cell via empty input', () => {
+    const wb = Workbook.createDefault();
+    const s = wb.sheets[0]!;
+    wb.setCellFromInput(s.id, { row: 1, col: 1 }, 'keep');
+    wb.setStyle(
+      s.id,
+      { start: { row: 1, col: 1 }, end: { row: 1, col: 1 } },
+      { italic: true },
+    );
+    const styleId = s.getCell({ row: 1, col: 1 })?.styleId;
+    wb.setCellFromInput(s.id, { row: 1, col: 1 }, '');
+    const cell = s.getCell({ row: 1, col: 1 });
+    expect(cell?.raw).toBeNull();
+    expect(cell?.styleId).toBe(styleId);
+  });
 });

@@ -131,9 +131,37 @@ export class Workbook {
   /** Convenience: set a cell from a raw user input string. Returns validation result. */
   setCellFromInput(sheetId: string, address: Address, input: string): ValidationResult {
     const sheet = this.getSheet(sheetId);
-    const next = parseInput(input);
+    const parsed = parseInput(input);
     const prev = sheet.getCell(address);
-    if (!prev && !next) return { ok: true };
+    if (!prev && !parsed) return { ok: true };
+    // Preserve sticky cell metadata (styleId, comment, validationId, and any
+    // format that the user previously applied) when typing over a styled cell.
+    let next: Cell | undefined = parsed;
+    if (prev) {
+      if (parsed) {
+        next = {
+          ...parsed,
+          styleId: parsed.styleId ?? prev.styleId,
+          comment: parsed.comment ?? prev.comment,
+          validationId: parsed.validationId ?? prev.validationId,
+          format: parsed.format ?? prev.format,
+        };
+      } else {
+        // Clearing value but keep style/comment/validation so formatting persists.
+        const keep =
+          prev.styleId !== undefined ||
+          prev.comment !== undefined ||
+          prev.validationId !== undefined;
+        if (keep) {
+          next = {
+            raw: null,
+            styleId: prev.styleId,
+            comment: prev.comment,
+            validationId: prev.validationId,
+          };
+        }
+      }
+    }
     // Validate before committing (skip formulas — they're always accepted).
     if (next && typeof next.raw !== 'string' && next.value !== undefined) {
       const check = validateCellInput(this, sheet, address, next.value ?? null);

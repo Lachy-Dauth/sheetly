@@ -25,6 +25,11 @@ import {
 } from './layout';
 import type { Selection } from './selection';
 import { cellSelection, extendTo, primaryRange } from './selection';
+import {
+  clearRange,
+  pasteFromClipboard,
+  writeClipboard,
+} from './clipboard';
 
 interface Props {
   workbook: Workbook;
@@ -166,6 +171,8 @@ export function Grid(props: Props) {
   };
 
   const onMouseDown = (e: React.MouseEvent) => {
+    // Ensure the grid container captures subsequent keyboard / clipboard events.
+    outerRef.current?.focus();
     const hit = hitTest(e.clientX, e.clientY);
     if (hit.zone === 'col-header' && hit.onHandle) {
       dragRef.current = {
@@ -463,6 +470,20 @@ export function Grid(props: Props) {
       className="grid-container"
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onCopy={(e) => {
+        if (editing) return;
+        writeClipboard(e.nativeEvent, sheet, primaryRange(sel));
+      }}
+      onCut={(e) => {
+        if (editing) return;
+        const range = primaryRange(sel);
+        writeClipboard(e.nativeEvent, sheet, range);
+        clearRange(workbook, sheet, range);
+      }}
+      onPaste={(e) => {
+        if (editing) return;
+        pasteFromClipboard(e.nativeEvent, workbook, sheet, sel.active);
+      }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
