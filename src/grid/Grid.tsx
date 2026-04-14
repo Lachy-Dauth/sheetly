@@ -410,27 +410,39 @@ export function Grid(props: Props) {
           e.preventDefault();
         }
     }
-    // Keep active cell visible.
-    scrollIntoView(sel.active);
+    // Active-cell auto-scroll is handled by the effect below, which observes the
+    // committed state. Calling scrollIntoView inline here would use the stale
+    // `sel` (setSel is async), so the viewport would lag one keystroke behind.
   };
 
-  const scrollIntoView = (a: Address) => {
-    const x = columnX(sheet, a.col);
-    const w = sheet.colWidth(a.col);
-    const y = rowY(sheet, a.row);
-    const h = sheet.rowHeight(a.row);
-    setScroll((s) => {
-      let sx = s.x;
-      let sy = s.y;
-      const vw = viewport.width - HEADER_W;
-      const vh = viewport.height - HEADER_H;
-      if (x < sx) sx = x;
-      else if (x + w > sx + vw) sx = x + w - vw;
-      if (y < sy) sy = y;
-      else if (y + h > sy + vh) sy = y + h - vh;
-      return { x: sx, y: sy };
-    });
-  };
+  const scrollIntoView = useCallback(
+    (a: Address) => {
+      const x = columnX(sheet, a.col);
+      const w = sheet.colWidth(a.col);
+      const y = rowY(sheet, a.row);
+      const h = sheet.rowHeight(a.row);
+      setScroll((s) => {
+        let sx = s.x;
+        let sy = s.y;
+        const vw = viewport.width - HEADER_W;
+        const vh = viewport.height - HEADER_H;
+        if (x < sx) sx = x;
+        else if (x + w > sx + vw) sx = x + w - vw;
+        if (y < sy) sy = y;
+        else if (y + h > sy + vh) sy = y + h - vh;
+        if (sx === s.x && sy === s.y) return s;
+        return { x: sx, y: sy };
+      });
+    },
+    [sheet, viewport.width, viewport.height],
+  );
+
+  useEffect(() => {
+    scrollIntoView(sel.active);
+    // Only scroll when the active cell changes. viewport resizes are intentionally
+    // ignored so resizing the window doesn't fight the user's scroll position.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel.active.row, sel.active.col]);
 
   // --- cell editor overlay --------------------------------------------
 

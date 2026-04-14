@@ -109,10 +109,41 @@ function formatDate(serial: number, fmt: string): string {
   const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
   const pad = (n: number, w: number) => String(n).padStart(w, '0');
-  return fmt.replace(
-    /yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s/gi,
-    (tok) => {
-      switch (tok.toLowerCase()) {
+
+  // Tokenise into date/time tokens + literal runs so we can disambiguate `m`/`mm`
+  // as minutes when they sit next to hours or seconds.
+  const tokenRe = /yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|hh|h|ss|s/gi;
+  const parts: Array<{ kind: 'tok'; value: string } | { kind: 'lit'; value: string }> = [];
+  let last = 0;
+  for (const match of fmt.matchAll(tokenRe)) {
+    if (match.index! > last) parts.push({ kind: 'lit', value: fmt.slice(last, match.index) });
+    parts.push({ kind: 'tok', value: match[0] });
+    last = match.index! + match[0].length;
+  }
+  if (last < fmt.length) parts.push({ kind: 'lit', value: fmt.slice(last) });
+
+  const isHourTok = (s: string) => /^h{1,2}$/i.test(s);
+  const isSecTok = (s: string) => /^s{1,2}$/i.test(s);
+  const isMinuteContext = (i: number): boolean => {
+    // `m` / `mm` means minutes when adjacent (across literal chars) to h/hh or s/ss.
+    for (let j = i - 1; j >= 0; j--) {
+      const p = parts[j]!;
+      if (p.kind === 'tok') return isHourTok(p.value);
+      if (/[A-Za-z]/.test(p.value)) return false;
+    }
+    for (let j = i + 1; j < parts.length; j++) {
+      const p = parts[j]!;
+      if (p.kind === 'tok') return isSecTok(p.value);
+      if (/[A-Za-z]/.test(p.value)) return false;
+    }
+    return false;
+  };
+
+  return parts
+    .map((p, i) => {
+      if (p.kind === 'lit') return p.value;
+      const tok = p.value.toLowerCase();
+      switch (tok) {
         case 'yyyy':
           return String(y);
         case 'yy':
@@ -122,9 +153,9 @@ function formatDate(serial: number, fmt: string): string {
         case 'mmm':
           return monthNames[m - 1]!;
         case 'mm':
-          return pad(m, 2);
+          return isMinuteContext(i) ? pad(mm, 2) : pad(m, 2);
         case 'm':
-          return String(m);
+          return isMinuteContext(i) ? String(mm) : String(m);
         case 'dddd':
           return dayFull[dow]!;
         case 'ddd':
@@ -142,8 +173,8 @@ function formatDate(serial: number, fmt: string): string {
         case 's':
           return String(ss);
         default:
-          return tok;
+          return p.value;
       }
-    },
-  ).replace(/MM/g, pad(mm, 2));
+    })
+    .join('');
 }

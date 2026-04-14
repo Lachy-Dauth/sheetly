@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatValue } from '../src/grid/format';
+import { dateToSerial } from '../src/engine/parse-input';
 
 describe('number format', () => {
   it('formats whole and fractional numbers with General', () => {
@@ -31,5 +32,15 @@ describe('number format', () => {
     // Excel serial 44927 -> 2023-01-01 ish (approximate).
     const out = formatValue(44927, 'yyyy-mm-dd');
     expect(out).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('distinguishes month vs minute in date/time formats', () => {
+    // Time-only format: an `mm` between `h` and `s` must render minutes, not month.
+    // 0.5625 of a day = 13:30:00. A month-interpretation would produce "13:01".
+    expect(formatValue(0.5625, 'hh:mm:ss')).toBe('13:30:00');
+    expect(formatValue(0.5625, 'hh:mm')).toBe('13:30');
+    // Mixed date+time: the first `mm` after `yyyy-` is month, the second after `hh:` is minutes.
+    const serial = dateToSerial(2023, 6, 15) + 0.5; // 2023-06-15 12:00
+    expect(formatValue(serial, 'yyyy-mm-dd hh:mm')).toBe('2023-06-15 12:00');
   });
 });
