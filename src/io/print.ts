@@ -123,22 +123,25 @@ export function renderSheetToHtml(
 
 /** Open the rendered HTML in a new window and trigger print. */
 export function printSheet(workbook: Workbook, sheet: Sheet, options?: PrintOptions): void {
-  const html = renderSheetToHtml(workbook, sheet, options);
   if (typeof window === 'undefined') return;
-  const win = window.open('', '_blank', 'noopener');
-  if (!win) return;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  // Let images/layout settle before firing the dialog.
-  setTimeout(() => {
-    try {
-      win.print();
-    } catch {
-      /* ignore */
-    }
-  }, 300);
+  const html = renderSheetToHtml(workbook, sheet, options);
+  // `noopener` makes window.open return null in modern browsers, so we can't
+  // write to the document. Use a Blob URL instead — the browser navigates to
+  // it directly and shows the rendered sheet, then auto-prints when loaded.
+  const withAutoPrint = html.replace(
+    '</body>',
+    `<script>window.addEventListener('load', () => setTimeout(() => window.print(), 200));</script></body>`,
+  );
+  const blob = new Blob([withAutoPrint], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (!win) {
+    // Pop-up blocker: fall back to navigating the current tab.
+    window.location.href = url;
+    return;
+  }
+  // Revoke later so the new window has time to load the URL.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 function resolveStyle(workbook: Workbook, cell: Cell | undefined): Style {
@@ -148,7 +151,7 @@ function resolveStyle(workbook: Workbook, cell: Cell | undefined): Style {
 
 function resolveDisplay(cell: Cell | undefined): string {
   if (!cell) return '';
-  const value = cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+  const value = cell.computed ?? cell.value ?? cell.raw;
   return formatValue(value as never, cell.format);
 }
 
