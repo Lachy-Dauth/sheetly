@@ -1,6 +1,6 @@
 import { makeError } from '../../cell';
 import { dateToSerial, serialToDate } from '../../parse-input';
-import { asNumber, asText, register } from '../registry';
+import { asNumber, asText, iterScalars, register } from '../registry';
 
 export function installDateTime(): void {
   register('TODAY', () => {
@@ -54,10 +54,37 @@ export function installDateTime(): void {
 
   register('WEEKNUM', (args) => {
     const serial = asNumber(args[0] ?? 0);
-    if (typeof serial !== 'number') return serial;
-    const { y } = serialToDate(Math.floor(serial));
+    const mode = args.length > 1 ? asNumber(args[1]!) : 1;
+    if (typeof serial !== 'number' || typeof mode !== 'number') return makeError('#VALUE!');
+    const target = Math.floor(serial);
+    const { y } = serialToDate(target);
     const jan1 = dateToSerial(y, 1, 1);
-    return Math.floor((Math.floor(serial) - jan1) / 7) + 1;
+    const jan1Dow = new Date(Date.UTC(y, 0, 1)).getUTCDay(); // 0=Sun..6=Sat
+    if (mode === 21) {
+      // ISO 8601: week 1 contains the first Thursday of the year (Mon-based weeks).
+      const isoDow = jan1Dow === 0 ? 7 : jan1Dow; // Mon=1..Sun=7
+      const monOfWeek1 = jan1 - isoDow + 1 + (isoDow > 4 ? 7 : 0);
+      const wk = Math.floor((target - monOfWeek1) / 7) + 1;
+      if (wk >= 1) return wk;
+      // Date falls in last ISO week of previous year.
+      const prevJan1 = dateToSerial(y - 1, 1, 1);
+      const prevJan1Dow = new Date(Date.UTC(y - 1, 0, 1)).getUTCDay();
+      const prevIsoDow = prevJan1Dow === 0 ? 7 : prevJan1Dow;
+      const prevMonOfWeek1 = prevJan1 - prevIsoDow + 1 + (prevIsoDow > 4 ? 7 : 0);
+      return Math.floor((target - prevMonOfWeek1) / 7) + 1;
+    }
+    let startDow: number;
+    if (mode === 1 || mode === 17) startDow = 0;
+    else if (mode === 2 || mode === 11) startDow = 1;
+    else if (mode === 12) startDow = 2;
+    else if (mode === 13) startDow = 3;
+    else if (mode === 14) startDow = 4;
+    else if (mode === 15) startDow = 5;
+    else if (mode === 16) startDow = 6;
+    else return makeError('#NUM!');
+    const offset = (jan1Dow - startDow + 7) % 7;
+    const startOfWeek1 = jan1 - offset;
+    return Math.floor((target - startOfWeek1) / 7) + 1;
   });
 
   register('EOMONTH', (args) => {
@@ -96,20 +123,42 @@ export function installDateTime(): void {
     const end = asNumber(args[1] ?? 0);
     const unit = asText(args[2] ?? 'D').toUpperCase();
     if (typeof start !== 'number' || typeof end !== 'number') return makeError('#VALUE!');
-    const sd = serialToDate(Math.floor(start));
-    const ed = serialToDate(Math.floor(end));
+    const startInt = Math.floor(start);
+    const endInt = Math.floor(end);
+    // Excel surfaces #NUM! when end < start.
+    if (endInt < startInt) return makeError('#NUM!');
+    const sd = serialToDate(startInt);
+    const ed = serialToDate(endInt);
     switch (unit) {
       case 'D':
-        return Math.floor(end) - Math.floor(start);
+        return endInt - startInt;
       case 'M': {
         let m = (ed.y - sd.y) * 12 + (ed.m - sd.m);
         if (ed.d < sd.d) m--;
-        return Math.max(0, m);
+        return m;
       }
       case 'Y': {
         let y = ed.y - sd.y;
         if (ed.m < sd.m || (ed.m === sd.m && ed.d < sd.d)) y--;
-        return Math.max(0, y);
+        return y;
+      }
+      case 'YM': {
+        let m = ed.m - sd.m;
+        if (ed.d < sd.d) m--;
+        return ((m % 12) + 12) % 12;
+      }
+      case 'YD': {
+        // Days between dates as if they were in the same year.
+        const anchor = sd.m > ed.m || (sd.m === ed.m && sd.d > ed.d) ? ed.y - 1 : ed.y;
+        const adjStart = dateToSerial(anchor, sd.m, sd.d);
+        return endInt - adjStart;
+      }
+      case 'MD': {
+        // Days between, ignoring months and years.
+        if (ed.d >= sd.d) return ed.d - sd.d;
+        // Borrow from previous month.
+        const prevMonthEnd = new Date(Date.UTC(ed.y, ed.m - 1, 0)).getUTCDate();
+        return prevMonthEnd - sd.d + ed.d;
       }
       default:
         return makeError('#NUM!');
@@ -120,21 +169,37 @@ export function installDateTime(): void {
     const start = asNumber(args[0] ?? 0);
     const end = asNumber(args[1] ?? 0);
     if (typeof start !== 'number' || typeof end !== 'number') return makeError('#VALUE!');
+    const startInt = Math.floor(start);
+    const endInt = Math.floor(end);
+    const sign = endInt < startInt ? -1 : 1;
+    const lo = Math.min(startInt, endInt);
+    const hi = Math.max(startInt, endInt);
+    // Optional [holidays] argument as a range or array.
+    const holidays = new Set<number>();
+    if (args.length > 2) {
+      for (const s of iterScalars(args[2]!)) {
+        if (typeof s === 'number') holidays.add(Math.floor(s));
+      }
+    }
     let count = 0;
-    const s = Math.min(Math.floor(start), Math.floor(end));
-    const e = Math.max(Math.floor(start), Math.floor(end));
-    for (let d = s; d <= e; d++) {
+    for (let d = lo; d <= hi; d++) {
       const sd = serialToDate(d);
       const dow = new Date(Date.UTC(sd.y, sd.m - 1, sd.d)).getUTCDay();
-      if (dow !== 0 && dow !== 6) count++;
+      if (dow !== 0 && dow !== 6 && !holidays.has(d)) count++;
     }
-    return count;
+    return sign * count;
   });
 
   register('WORKDAY', (args) => {
     const start = asNumber(args[0] ?? 0);
     const days = asNumber(args[1] ?? 0);
     if (typeof start !== 'number' || typeof days !== 'number') return makeError('#VALUE!');
+    const holidays = new Set<number>();
+    if (args.length > 2) {
+      for (const s of iterScalars(args[2]!)) {
+        if (typeof s === 'number') holidays.add(Math.floor(s));
+      }
+    }
     let d = Math.floor(start);
     let remaining = Math.floor(days);
     const dir = remaining >= 0 ? 1 : -1;
@@ -143,7 +208,7 @@ export function installDateTime(): void {
       d += dir;
       const sd = serialToDate(d);
       const dow = new Date(Date.UTC(sd.y, sd.m - 1, sd.d)).getUTCDay();
-      if (dow !== 0 && dow !== 6) remaining--;
+      if (dow !== 0 && dow !== 6 && !holidays.has(d)) remaining--;
     }
     return d;
   });

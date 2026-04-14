@@ -50,7 +50,7 @@ export function buildTsv(sheet: Sheet, range: RangeAddress): string {
         const v =
           typeof cell.raw === 'string' && cell.raw.startsWith('=')
             ? cell.computed ?? null
-            : cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+            : cell.value ?? cell.raw;
         text = toText(v ?? null);
       }
       out.push(escapeField(text, '\t'));
