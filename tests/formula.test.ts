@@ -1,0 +1,178 @@
+import { describe, expect, it } from 'vitest';
+import { Workbook } from '../src/engine/workbook';
+import type { Address } from '../src/engine/address';
+import { isErrorValue } from '../src/engine/cell';
+
+function wb() {
+  const w = Workbook.createDefault();
+  return { w, s: w.sheets[0]! };
+}
+
+function eval$(formula: string, at: Address = { row: 9, col: 9 }) {
+  const { w, s } = wb();
+  w.setCellFromInput(s.id, at, formula);
+  return s.getCell(at)?.computed ?? null;
+}
+
+describe('formula: arithmetic', () => {
+  it('evaluates +,-,*,/,^', () => {
+    expect(eval$('=1+2')).toBe(3);
+    expect(eval$('=10-4')).toBe(6);
+    expect(eval$('=3*4')).toBe(12);
+    expect(eval$('=10/4')).toBe(2.5);
+    expect(eval$('=2^10')).toBe(1024);
+  });
+  it('honours precedence', () => {
+    expect(eval$('=1+2*3')).toBe(7);
+    expect(eval$('=(1+2)*3')).toBe(9);
+    // Excel: unary minus binds tighter than ^, so -2^2 = 4 (not -4).
+    expect(eval$('=-2^2')).toBe(4);
+    expect(eval$('=-(2^2)')).toBe(-4);
+  });
+  it('returns #DIV/0! on zero divide', () => {
+    const v = eval$('=1/0');
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#DIV/0!');
+  });
+  it('concatenates with &', () => {
+    expect(eval$('="foo"&"bar"')).toBe('foobar');
+  });
+  it('compares', () => {
+    expect(eval$('=1<2')).toBe(true);
+    expect(eval$('=2<=2')).toBe(true);
+    expect(eval$('=2<>2')).toBe(false);
+    expect(eval$('=1=1')).toBe(true);
+  });
+  it('handles percent postfix', () => {
+    expect(eval$('=50%')).toBe(0.5);
+  });
+});
+
+describe('formula: refs', () => {
+  it('resolves A1 refs', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '7');
+    w.setCellFromInput(s.id, { row: 1, col: 0 }, '=A1*2');
+    expect(s.getCell({ row: 1, col: 0 })?.computed).toBe(14);
+  });
+
+  it('recomputes transitively', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '1');
+    w.setCellFromInput(s.id, { row: 1, col: 0 }, '=A1+1');
+    w.setCellFromInput(s.id, { row: 2, col: 0 }, '=A2+1');
+    expect(s.getCell({ row: 2, col: 0 })?.computed).toBe(3);
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '10');
+    expect(s.getCell({ row: 2, col: 0 })?.computed).toBe(12);
+  });
+
+  it('detects cycles', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '=A2');
+    w.setCellFromInput(s.id, { row: 1, col: 0 }, '=A1');
+    const v = s.getCell({ row: 0, col: 0 })?.computed;
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#CIRC!');
+  });
+});
+
+describe('formula: math functions', () => {
+  it('SUM across a range', () => {
+    const { w, s } = wb();
+    for (let r = 0; r < 5; r++) w.setCellFromInput(s.id, { row: r, col: 0 }, String(r + 1));
+    w.setCellFromInput(s.id, { row: 0, col: 1 }, '=SUM(A1:A5)');
+    expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(15);
+  });
+  it('ROUND / FLOOR / CEILING', () => {
+    expect(eval$('=ROUND(3.14159,2)')).toBe(3.14);
+    expect(eval$('=FLOOR(9,4)')).toBe(8);
+    expect(eval$('=CEILING(9,4)')).toBe(12);
+  });
+  it('SUMIF with >', () => {
+    const { w, s } = wb();
+    for (let r = 0; r < 5; r++) w.setCellFromInput(s.id, { row: r, col: 0 }, String(r + 1));
+    w.setCellFromInput(s.id, { row: 0, col: 1 }, '=SUMIF(A1:A5,">2")');
+    expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(12);
+  });
+  it('MIN/MAX/MEDIAN', () => {
+    const { w, s } = wb();
+    [5, 3, 8, 1, 4].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, String(v)));
+    w.setCellFromInput(s.id, { row: 0, col: 1 }, '=MIN(A1:A5)');
+    w.setCellFromInput(s.id, { row: 1, col: 1 }, '=MAX(A1:A5)');
+    w.setCellFromInput(s.id, { row: 2, col: 1 }, '=MEDIAN(A1:A5)');
+    expect(s.getCell({ row: 0, col: 1 })?.computed).toBe(1);
+    expect(s.getCell({ row: 1, col: 1 })?.computed).toBe(8);
+    expect(s.getCell({ row: 2, col: 1 })?.computed).toBe(4);
+  });
+});
+
+describe('formula: text functions', () => {
+  it('LEFT/RIGHT/MID/LEN', () => {
+    expect(eval$('=LEFT("hello",3)')).toBe('hel');
+    expect(eval$('=RIGHT("hello",2)')).toBe('lo');
+    expect(eval$('=MID("hello",2,3)')).toBe('ell');
+    expect(eval$('=LEN("hello")')).toBe(5);
+  });
+  it('UPPER/LOWER/PROPER/TRIM', () => {
+    expect(eval$('=UPPER("abc")')).toBe('ABC');
+    expect(eval$('=LOWER("ABC")')).toBe('abc');
+    expect(eval$('=PROPER("hello world")')).toBe('Hello World');
+    expect(eval$('=TRIM("  a   b  ")')).toBe('a b');
+  });
+  it('SUBSTITUTE/REPLACE/FIND', () => {
+    expect(eval$('=SUBSTITUTE("a-b-c","-","/")')).toBe('a/b/c');
+    expect(eval$('=REPLACE("hello",2,3,"X")')).toBe('hXo');
+    expect(eval$('=FIND("lo","hello")')).toBe(4);
+  });
+});
+
+describe('formula: logical', () => {
+  it('IF/AND/OR/NOT', () => {
+    expect(eval$('=IF(TRUE,1,2)')).toBe(1);
+    expect(eval$('=IF(FALSE,1,2)')).toBe(2);
+    expect(eval$('=AND(TRUE,TRUE,FALSE)')).toBe(false);
+    expect(eval$('=OR(FALSE,FALSE,TRUE)')).toBe(true);
+    expect(eval$('=NOT(TRUE)')).toBe(false);
+  });
+  it('IFERROR', () => {
+    expect(eval$('=IFERROR(1/0,"oops")')).toBe('oops');
+    expect(eval$('=IFERROR(1/1,"oops")')).toBe(1);
+  });
+});
+
+describe('formula: lookup', () => {
+  it('VLOOKUP exact', () => {
+    const { w, s } = wb();
+    [['a', 1], ['b', 2], ['c', 3]].forEach(([k, v], r) => {
+      w.setCellFromInput(s.id, { row: r, col: 0 }, String(k));
+      w.setCellFromInput(s.id, { row: r, col: 1 }, String(v));
+    });
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=VLOOKUP("b",A1:B3,2,FALSE)');
+    expect(s.getCell({ row: 0, col: 3 })?.computed).toBe(2);
+  });
+  it('INDEX/MATCH', () => {
+    const { w, s } = wb();
+    for (let r = 0; r < 3; r++) {
+      w.setCellFromInput(s.id, { row: r, col: 0 }, String(r + 1));
+      w.setCellFromInput(s.id, { row: r, col: 1 }, `val${r}`);
+    }
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=INDEX(B1:B3,MATCH(2,A1:A3,0))');
+    expect(s.getCell({ row: 0, col: 3 })?.computed).toBe('val1');
+  });
+});
+
+describe('formula: info', () => {
+  it('ISNUMBER/ISTEXT/ISBLANK', () => {
+    expect(eval$('=ISNUMBER(5)')).toBe(true);
+    expect(eval$('=ISTEXT("x")')).toBe(true);
+    expect(eval$('=ISBLANK(A1)')).toBe(true);
+  });
+});
+
+describe('formula: error in name', () => {
+  it('unknown function returns #NAME?', () => {
+    const v = eval$('=NOPE(1)');
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#NAME?');
+  });
+});
