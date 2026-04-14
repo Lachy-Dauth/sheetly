@@ -66,9 +66,21 @@ export function installArrays(): void {
   register('SORT', (args) => {
     const a = asArray(args[0] ?? null);
     if (!a) return [];
-    const sortIndex = args.length > 1 ? (asNumber(args[1]!) as number) - 1 : 0;
-    const asc = args.length > 2 ? (asNumber(args[2]!) as number) >= 0 : true;
-    const out = [...a.map((r) => [...r])];
+    let sortIndex = 0;
+    if (args.length > 1) {
+      const n = asNumber(args[1]!);
+      if (typeof n !== 'number') return n;
+      sortIndex = Math.floor(n) - 1;
+    }
+    let asc = true;
+    if (args.length > 2) {
+      const n = asNumber(args[2]!);
+      if (typeof n !== 'number') return n;
+      asc = n >= 0;
+    }
+    const cols = a[0]?.length ?? 0;
+    if (sortIndex < 0 || sortIndex >= cols) return makeError('#VALUE!');
+    const out = a.map((r) => [...r]);
     out.sort((x, y) => {
       const xv = x[sortIndex] ?? null;
       const yv = y[sortIndex] ?? null;

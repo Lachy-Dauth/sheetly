@@ -219,6 +219,49 @@ describe('formula: named ranges', () => {
   });
 });
 
+describe('formula: financial', () => {
+  it('NPER with pmt=0 and r=0 returns #NUM! instead of NaN', () => {
+    const v = eval$('=NPER(0,0,1000,-2000)');
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#NUM!');
+  });
+  it('NPER returns #NUM! when log argument would be non-positive', () => {
+    // pv*r + pmt*(1+r*type) = 0 → ratio undefined; or numerator non-positive.
+    const v = eval$('=NPER(0.1,1,-100,-100)');
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#NUM!');
+  });
+  it('NPER computes valid case', () => {
+    // PV=-1000 (loan), PMT=200/period, no FV. ~5.36 periods.
+    const v = eval$('=NPER(0,200,-1000,0)');
+    expect(v).toBeCloseTo(5, 5);
+  });
+});
+
+describe('formula: math', () => {
+  it('SUMPRODUCT errors on mismatched array sizes', () => {
+    const { w, s } = wb();
+    [1, 2, 3].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, String(v)));
+    [10, 20].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 1 }, String(v)));
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=SUMPRODUCT(A1:A3,B1:B2)');
+    const v = s.getCell({ row: 0, col: 3 })?.computed;
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#VALUE!');
+  });
+});
+
+describe('formula: array', () => {
+  it('SORT errors on out-of-bounds sort index', () => {
+    const { w, s } = wb();
+    w.setCellFromInput(s.id, { row: 0, col: 0 }, '3');
+    w.setCellFromInput(s.id, { row: 1, col: 0 }, '1');
+    w.setCellFromInput(s.id, { row: 0, col: 1 }, '=SORT(A1:A2,5)');
+    const v = s.getCell({ row: 0, col: 1 })?.computed;
+    expect(isErrorValue(v)).toBe(true);
+    if (isErrorValue(v)) expect(v.code).toBe('#VALUE!');
+  });
+});
+
 describe('formula: error in name', () => {
   it('unknown function returns #NAME?', () => {
     const v = eval$('=NOPE(1)');

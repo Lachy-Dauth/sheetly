@@ -7,7 +7,7 @@
 import type { Address, RangeAddress } from './address';
 import { normalizeRange } from './address';
 import type { Scalar } from './cell';
-import { toNumber, toText } from './cell';
+import { isErrorValue, toNumber, toText } from './cell';
 import type { Sheet } from './sheet';
 import type { Workbook } from './workbook';
 import { evaluateFormula } from './formula/eval';
@@ -80,9 +80,13 @@ export function validateValue(
     }
     case 'formula': {
       const result = evaluateFormula(rule.formula, workbook, sheet.id, address);
+      // An ErrorValue is truthy in JS, so `!!result` would silently pass it —
+      // surface formula errors as validation failures instead.
+      if (isErrorValue(result)) return { ok: false, message: `Validation formula error: ${result.code}` };
       if (typeof result === 'boolean') return result ? { ok: true } : { ok: false, message: 'Validation formula returned FALSE' };
       if (typeof result === 'number') return result !== 0 ? { ok: true } : { ok: false, message: 'Validation formula returned 0' };
-      return { ok: !!result };
+      if (result === null || result === '') return { ok: false, message: 'Validation formula returned blank' };
+      return { ok: true };
     }
   }
 }

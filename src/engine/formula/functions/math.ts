@@ -164,6 +164,10 @@ export function installMath(): void {
     if (args.length === 0) return 0;
     const arrays = args.map((a) => flatMatrix(a));
     const len = arrays[0]!.length;
+    // Excel returns #VALUE! if any array has a different length than the first.
+    for (const arr of arrays) {
+      if (arr.length !== len) return makeError('#VALUE!');
+    }
     let total = 0;
     for (let i = 0; i < len; i++) {
       let product = 1;
