@@ -74,9 +74,10 @@ export function makePivot(args: {
   filters?: PivotFilter[];
   grandTotals?: { rows: boolean; cols: boolean };
 }): Pivot {
+  const idNum = nextId++;
   return {
-    id: `p${nextId++}`,
-    name: args.name ?? `Pivot${nextId}`,
+    id: `p${idNum}`,
+    name: args.name ?? `Pivot${idNum}`,
     sheetId: args.sheetId,
     output: args.output,
     source: args.source,

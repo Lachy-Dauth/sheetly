@@ -243,4 +243,25 @@ describe('workbook integration', () => {
     w.undo();
     expect(w.pivots.get(p.id)!.name).not.toBe('Renamed');
   });
+
+  it('default pivot name matches its id suffix', () => {
+    // Previously: `Pivot${nextId}` was off-by-one because nextId++ ran first.
+    const { w, sid } = seedSales();
+    const p = addPivotBasic(w, sid, {
+      rows: [{ sourceColumn: 0 }],
+      values: [{ sourceColumn: 2, agg: 'sum' }],
+    });
+    const idNum = p.id.replace(/^p/, '');
+    expect(p.name).toBe(`Pivot${idNum}`);
+  });
+});
+
+describe('pivot grouping safety', () => {
+  it('numberRange with step=0 falls back to ungrouped key', () => {
+    const field: PivotField = { sourceColumn: 0, grouping: { kind: 'numberRange', step: 0 } };
+    const g = groupKey(field, 42);
+    expect(Number.isFinite(g.sort as number)).toBe(true);
+    expect(g.label).not.toContain('NaN');
+    expect(g.label).not.toContain('Infinity');
+  });
 });
