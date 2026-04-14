@@ -11,6 +11,7 @@ import type { Workbook } from './workbook';
 import { evaluateFormula } from './formula/eval';
 import { parseFormula } from './formula/parse';
 import { collectDependencies } from './formula/deps';
+import { recordEval, recordRecalc } from './profile';
 
 type DepKey = string; // `${sheetId}:${row},${col}`
 
@@ -62,6 +63,7 @@ export class FormulaRuntime {
 
   recalc(): void {
     if (this.dirty.size === 0) return;
+    recordRecalc();
     // Build subgraph of dirty nodes and do Kahn's algorithm.
     const toProcess = new Set(this.dirty);
     this.dirty.clear();
@@ -162,6 +164,7 @@ export class FormulaRuntime {
     const cell = sheet.cells.get(cellKey(row, col));
     if (!cell) return;
     if (typeof cell.raw === 'string' && cell.raw.startsWith('=')) {
+      recordEval();
       const res = evaluateFormula(cell.raw.slice(1), this.workbook, sheetId, { row, col });
       cell.computed = res;
     } else {

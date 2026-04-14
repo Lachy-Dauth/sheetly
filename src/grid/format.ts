@@ -6,17 +6,72 @@
 import type { Scalar } from '../engine/cell';
 import { isErrorValue, toText } from '../engine/cell';
 import { serialToDate } from '../engine/parse-input';
+import { recordFormat } from '../engine/profile';
+
+/**
+ * Small LRU cache keyed by (format, value-signature). The common grid paint
+ * re-formats every visible cell every frame; caching the result of the most
+ * expensive path — date/number-format application — avoids redundant work.
+ */
+const FORMAT_CACHE_LIMIT = 2048;
+const formatCache = new Map<string, string>();
+
+function cacheKey(value: Scalar | undefined, format?: string): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return `n|${format ?? ''}|${value}`;
+  if (typeof value === 'boolean') return `b|${format ?? ''}|${value}`;
+  return null; // Strings/errors skip the cache — already cheap.
+}
+
+function cacheLookup(key: string): string | undefined {
+  const hit = formatCache.get(key);
+  if (hit === undefined) return undefined;
+  formatCache.delete(key);
+  formatCache.set(key, hit);
+  return hit;
+}
+
+function cacheStore(key: string, value: string): void {
+  formatCache.set(key, value);
+  if (formatCache.size > FORMAT_CACHE_LIMIT) {
+    const oldest = formatCache.keys().next().value;
+    if (oldest !== undefined) formatCache.delete(oldest);
+  }
+}
+
+/** Test-only: invalidate the format cache. */
+export function clearFormatCache(): void {
+  formatCache.clear();
+}
 
 export function formatValue(value: Scalar | undefined, format?: string): string {
   if (value === null || value === undefined) return '';
   if (isErrorValue(value)) return value.code;
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-  if (!format || format === 'General' || format === 'general') {
-    if (typeof value === 'number') return formatGeneralNumber(value);
-    return toText(value);
+
+  const key = cacheKey(value, format);
+  if (key) {
+    const hit = cacheLookup(key);
+    if (hit !== undefined) {
+      recordFormat(true);
+      return hit;
+    }
   }
-  if (typeof value === 'number') return applyFormat(value, format);
-  return toText(value);
+
+  let result: string;
+  if (!format || format === 'General' || format === 'general') {
+    result = typeof value === 'number' ? formatGeneralNumber(value) : toText(value);
+  } else if (typeof value === 'number') {
+    result = applyFormat(value, format);
+  } else {
+    result = toText(value);
+  }
+
+  if (key) {
+    cacheStore(key, result);
+    recordFormat(false);
+  }
+  return result;
 }
 
 function formatGeneralNumber(n: number): string {

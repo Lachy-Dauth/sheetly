@@ -5,6 +5,7 @@
 
 import type { AstNode, BinaryOp, UnaryOp } from './ast';
 import { parseRef } from '../address';
+import { recordParse } from '../profile';
 import type { Token } from './tokens';
 import { tokenize } from './tokens';
 
@@ -232,6 +233,34 @@ function splitSheet(name: string): { sheet?: string; local: string } {
   return { local: name };
 }
 
+/**
+ * LRU cache for parsed formulas. Hot paths (refreshPrecedents, evaluateFormula)
+ * often re-parse identical strings after a single edit; memoising here cuts
+ * wasted work without touching call sites.
+ */
+const PARSE_CACHE_LIMIT = 1024;
+const parseCache = new Map<string, ParseResult>();
+
 export function parseFormula(source: string): ParseResult {
-  return new Parser(source).parse();
+  const cached = parseCache.get(source);
+  if (cached) {
+    // Refresh LRU position.
+    parseCache.delete(source);
+    parseCache.set(source, cached);
+    recordParse(true);
+    return cached;
+  }
+  const result = new Parser(source).parse();
+  parseCache.set(source, result);
+  if (parseCache.size > PARSE_CACHE_LIMIT) {
+    const oldest = parseCache.keys().next().value;
+    if (oldest !== undefined) parseCache.delete(oldest);
+  }
+  recordParse(false);
+  return result;
+}
+
+/** Test-only: invalidate the parse cache. */
+export function clearParseCache(): void {
+  parseCache.clear();
 }
