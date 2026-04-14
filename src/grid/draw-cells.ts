@@ -170,7 +170,7 @@ function drawCellText(d: DrawCtx, box: CellBox): void {
   const cell = box.cell!;
   const style = box.style;
   const overlay = box.overlay;
-  const raw = cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+  const raw = cell.computed ?? cell.value ?? cell.raw;
   const text = formatValue(raw ?? null, style?.format ?? cell.format);
   if (!text) return;
 
@@ -339,7 +339,7 @@ export function measureColumnWidth(
     const weight = style?.bold ? 'bold' : 'normal';
     const italic = style?.italic ? 'italic' : 'normal';
     ctx.font = `${italic} ${weight} ${size}px -apple-system, "Segoe UI", sans-serif`;
-    const raw = cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+    const raw = cell.computed ?? cell.value ?? cell.raw;
     const text = formatValue(raw ?? null, style?.format ?? cell.format);
     const w = ctx.measureText(text).width + 12;
     if (w > max) max = w;

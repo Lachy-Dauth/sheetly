@@ -95,7 +95,7 @@ function collectNumericValues(sheet: Sheet, range: RangeAddress): number[] {
 function scalarOf(sheet: Sheet, a: Address): Scalar {
   const cell = sheet.getCell(a);
   if (!cell) return null;
-  return cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+  return cell.computed ?? cell.value ?? cell.raw;
 }
 
 function rangeContains(range: RangeAddress, a: Address): boolean {

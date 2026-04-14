@@ -200,7 +200,7 @@ export function sortRange(
 
 function valueForSort(cell: Cell | undefined): Scalar {
   if (!cell) return null;
-  return cell.computed ?? cell.value ?? (typeof cell.raw === 'string' ? cell.raw : cell.raw);
+  return cell.computed ?? cell.value ?? cell.raw;
 }
 
 function compareScalars(a: Scalar, b: Scalar): number {

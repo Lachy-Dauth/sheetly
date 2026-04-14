@@ -126,10 +126,42 @@ export function installLookup(): void {
   register('XMATCH', (args) => {
     const key = asScalar(args[0] ?? null);
     const list = asArray(args[1] ?? null);
+    // match_mode: 0 exact (default), -1 exact-or-next-smaller, 1 exact-or-next-larger, 2 wildcard.
+    const matchMode = args.length > 2 ? asNumber(args[2]!) : 0;
+    // search_mode: 1 first→last (default), -1 last→first, 2/-2 binary search (treated as linear).
+    const searchMode = args.length > 3 ? asNumber(args[3]!) : 1;
+    if (typeof matchMode !== 'number') return matchMode;
+    if (typeof searchMode !== 'number') return searchMode;
     if (!list) return makeError('#N/A');
     const flat = list.flat();
-    for (let i = 0; i < flat.length; i++) if (compareEq(flat[i] ?? null, key)) return i + 1;
-    return makeError('#N/A');
+    const indices: number[] = [];
+    for (let i = 0; i < flat.length; i++) indices.push(i);
+    if (searchMode < 0) indices.reverse();
+    const wildcardRe = matchMode === 2 ? wildcardToRegex(asText(key)) : null;
+    let bestIdx = -1;
+    let bestVal: Scalar = null;
+    for (const i of indices) {
+      const v = flat[i] ?? null;
+      if (wildcardRe) {
+        if (wildcardRe.test(asText(v))) return i + 1;
+        continue;
+      }
+      if (compareEq(v, key)) return i + 1;
+      if (matchMode === -1) {
+        // Track largest value <= key.
+        if (lt(v, key) && (bestIdx < 0 || lt(bestVal, v))) {
+          bestIdx = i;
+          bestVal = v;
+        }
+      } else if (matchMode === 1) {
+        // Track smallest value >= key.
+        if (gt(v, key) && (bestIdx < 0 || gt(bestVal, v))) {
+          bestIdx = i;
+          bestVal = v;
+        }
+      }
+    }
+    return bestIdx >= 0 ? bestIdx + 1 : makeError('#N/A');
   });
 
   register('XLOOKUP', (args) => {
@@ -179,6 +211,21 @@ function toBoolLoose(v: FnValue): boolean {
   if (typeof s === 'number') return s !== 0;
   return String(s).toUpperCase() === 'TRUE';
 }
+function wildcardToRegex(pattern: string): RegExp {
+  // Excel wildcards: * any chars, ? single char, ~* and ~? escape literals.
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i]!;
+    if (c === '~' && (pattern[i + 1] === '*' || pattern[i + 1] === '?')) {
+      out += pattern[i + 1]!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      i++;
+    } else if (c === '*') out += '.*';
+    else if (c === '?') out += '.';
+    else out += c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}$`, 'i');
+}
+
 function compareEq(a: Scalar, b: Scalar): boolean {
   if (a === null && b === null) return true;
   if (typeof a === 'number' && typeof b === 'number') return a === b;
