@@ -20,6 +20,10 @@ import type { Validation, ValidationRule, ValidationResult } from './validation'
 import { makeValidationId, validateCellInput } from './validation';
 import type { Chart, ChartType, Sparkline } from './charts';
 import { makeChart } from './charts';
+import type { Pivot, PivotSource } from './pivots';
+import { PivotRegistry, makePivot } from './pivots';
+import { buildPivotCache } from './pivot-cache';
+import { computePivotLayout } from './pivot-layout';
 
 export interface NamedRange {
   name: string;
@@ -34,6 +38,7 @@ export class Workbook {
   namedRanges = new Map<string, NamedRange>();
   styles = new StyleTable();
   tables = new TableRegistry();
+  pivots = new PivotRegistry();
   runtime: FormulaRuntime;
 
   private history: Command[] = [];
@@ -372,6 +377,60 @@ export class Workbook {
     return undefined;
   }
 
+  /** Create a new pivot. Does not refresh output cells — call `refreshPivot`. */
+  addPivot(args: {
+    sheetId: string;
+    output: Address;
+    source: PivotSource;
+    rows?: Pivot['rows'];
+    cols?: Pivot['cols'];
+    values?: Pivot['values'];
+    filters?: Pivot['filters'];
+    name?: string;
+  }): Pivot {
+    const pivot = makePivot(args);
+    this.apply({ kind: 'addPivot', pivot });
+    return pivot;
+  }
+
+  removePivot(pivotId: string): void {
+    this.apply({ kind: 'removePivot', pivotId });
+  }
+
+  updatePivot(pivotId: string, patch: Partial<Pivot>): void {
+    this.apply({ kind: 'updatePivot', pivotId, patch });
+  }
+
+  /**
+   * Re-aggregate a pivot and write its matrix into the destination cells.
+   * Returned as a single setCells command so undo reverses the whole refresh.
+   */
+  refreshPivot(pivotId: string): void {
+    const pivot = this.pivots.get(pivotId);
+    if (!pivot) return;
+    const cache = buildPivotCache(this, pivot.source);
+    const output = computePivotLayout(pivot, cache);
+    const sheet = this.getSheet(pivot.sheetId);
+    const changes: Array<{ address: Address; next: Cell | undefined; prev: Cell | undefined }> = [];
+    for (let r = 0; r < output.matrix.length; r++) {
+      for (let c = 0; c < output.matrix[r]!.length; c++) {
+        const v = output.matrix[r]![c];
+        const address = { row: pivot.output.row + r, col: pivot.output.col + c };
+        const prev = sheet.getCell(address);
+        let next: Cell | undefined;
+        if (v === null || v === undefined) {
+          next = undefined;
+        } else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+          next = { raw: v, value: v };
+        } else {
+          next = { raw: null, computed: v };
+        }
+        changes.push({ address, next, prev });
+      }
+    }
+    if (changes.length > 0) this.apply({ kind: 'setCells', sheetId: pivot.sheetId, changes });
+  }
+
   /** Write a sparkline onto a cell via a standard setCell command. */
   setSparkline(sheetId: string, address: Address, sparkline: Sparkline | undefined): void {
     const sheet = this.getSheet(sheetId);
@@ -557,6 +616,25 @@ export class Workbook {
         }
         return { ...cmd, prev };
       }
+      case 'addPivot': {
+        this.pivots.add(cmd.pivot);
+        return cmd;
+      }
+      case 'removePivot': {
+        const snapshot = this.pivots.remove(cmd.pivotId);
+        return { ...cmd, snapshot };
+      }
+      case 'updatePivot': {
+        const p = this.pivots.get(cmd.pivotId);
+        if (!p) return cmd;
+        const prev: Partial<Pivot> = {};
+        const pp = p as unknown as Record<string, unknown>;
+        for (const k of Object.keys(cmd.patch) as (keyof Pivot)[]) {
+          (prev as Record<string, unknown>)[k] = pp[k];
+          pp[k] = (cmd.patch as Record<string, unknown>)[k];
+        }
+        return { ...cmd, prev };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -671,6 +749,14 @@ export class Workbook {
           : { kind: 'composite', label: 'no-op', children: [] };
       case 'updateChart':
         return { kind: 'updateChart', chartId: cmd.chartId, patch: cmd.prev ?? {} };
+      case 'addPivot':
+        return { kind: 'removePivot', pivotId: cmd.pivot.id };
+      case 'removePivot':
+        return cmd.snapshot
+          ? { kind: 'addPivot', pivot: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'updatePivot':
+        return { kind: 'updatePivot', pivotId: cmd.pivotId, patch: cmd.prev ?? {} };
       case 'composite':
         return {
           kind: 'composite',

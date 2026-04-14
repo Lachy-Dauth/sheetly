@@ -9,6 +9,7 @@ import { BorderMenu } from './BorderMenu';
 import { ConditionalMenu } from './ConditionalMenu';
 import { DataMenu } from './DataMenu';
 import { ChartMenu } from './ChartMenu';
+import { PivotMenu } from './PivotMenu';
 import type { ThemeId } from '../grid/theme';
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
   onImport: () => void;
   onFind: () => void;
   onToggleCharts: () => void;
+  onTogglePivots: () => void;
+  onOpenPivots: () => void;
 }
 
 export function Toolbar(props: Props) {
@@ -38,6 +41,8 @@ export function Toolbar(props: Props) {
     onImport,
     onFind,
     onToggleCharts,
+    onTogglePivots,
+    onOpenPivots,
   } = props;
 
   const activeRange = selectionRange ?? { start: selection, end: selection };
@@ -244,6 +249,15 @@ export function Toolbar(props: Props) {
         />
         <button onClick={onToggleCharts} title="Open charts panel">
           📊
+        </button>
+        <PivotMenu
+          workbook={workbook}
+          sheet={sheet}
+          range={activeRange}
+          onCreated={onOpenPivots}
+        />
+        <button onClick={onTogglePivots} title="Open pivot tables panel">
+          Σ
         </button>
         <DataMenu
           workbook={workbook}

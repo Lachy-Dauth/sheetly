@@ -9,6 +9,7 @@ import type { Table } from './tables';
 import type { ConditionalRule } from './conditional';
 import type { Validation } from './validation';
 import type { Chart } from './charts';
+import type { Pivot } from './pivots';
 
 export type CommandKind =
   | 'setCell'
@@ -39,6 +40,9 @@ export type CommandKind =
   | 'addChart'
   | 'removeChart'
   | 'updateChart'
+  | 'addPivot'
+  | 'removePivot'
+  | 'updatePivot'
   | 'composite';
 
 export interface SetCellCmd {
@@ -238,6 +242,24 @@ export interface UpdateChartCmd {
   prev?: Partial<Chart>;
 }
 
+export interface AddPivotCmd {
+  kind: 'addPivot';
+  pivot: Pivot;
+}
+
+export interface RemovePivotCmd {
+  kind: 'removePivot';
+  pivotId: string;
+  snapshot?: Pivot;
+}
+
+export interface UpdatePivotCmd {
+  kind: 'updatePivot';
+  pivotId: string;
+  patch: Partial<Pivot>;
+  prev?: Partial<Pivot>;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -273,4 +295,7 @@ export type Command =
   | AddChartCmd
   | RemoveChartCmd
   | UpdateChartCmd
+  | AddPivotCmd
+  | RemovePivotCmd
+  | UpdatePivotCmd
   | CompositeCmd;
