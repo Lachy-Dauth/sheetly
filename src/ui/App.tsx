@@ -9,7 +9,7 @@ import { ChartsPanel } from './ChartsPanel';
 import { PivotPanel } from './PivotPanel';
 import { CommentsPanel } from './CommentsPanel';
 import { importCsv } from '../io/csv';
-import { printSheet } from '../io/print';
+import { printSheet, downloadSheetCharts } from '../io/print';
 import { downloadReadonlyBundle } from '../io/bundle';
 import type { Address, RangeAddress } from '../engine/address';
 import type { ThemeId } from '../grid/theme';
@@ -76,6 +76,8 @@ export function App() {
         onOpenPivots={() => setPivotsOpen(true)}
         onToggleComments={() => setCommentsOpen((v) => !v)}
         onPrint={() => printSheet(workbook, sheet)}
+        onPrintCharts={() => printSheet(workbook, sheet, { chartsOnly: true, includeCharts: true })}
+        onDownloadCharts={() => downloadSheetCharts(workbook, sheet)}
         onExportBundle={() => downloadReadonlyBundle(workbook)}
         onToggleProtection={() => {
           if (sheet.protection?.enabled) {

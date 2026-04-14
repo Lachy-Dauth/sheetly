@@ -118,6 +118,47 @@ describe('HTML export', () => {
     expect(html).toContain('<table>');
   });
 
+  it('embeds charts as inline SVG when present', () => {
+    const w = Workbook.createDefault();
+    const sid = w.sheets[0]!.id;
+    w.setCellFromInput(sid, { row: 0, col: 0 }, 'q');
+    w.setCellFromInput(sid, { row: 0, col: 1 }, 'sales');
+    w.setCellFromInput(sid, { row: 1, col: 0 }, 'Q1');
+    w.setCellFromInput(sid, { row: 1, col: 1 }, '10');
+    w.setCellFromInput(sid, { row: 2, col: 0 }, 'Q2');
+    w.setCellFromInput(sid, { row: 2, col: 1 }, '20');
+    w.addChart(
+      sid,
+      'column',
+      { start: { row: 0, col: 0 }, end: { row: 2, col: 1 } },
+      {
+        hasHeaderRow: true,
+        hasCategoryColumn: true,
+        options: { title: 'Quarterly sales' },
+      },
+    );
+    const html = renderSheetToHtml(w, w.getSheet(sid));
+    expect(html).toContain('<svg');
+    expect(html).toContain('Quarterly sales');
+    expect(html).toContain('class="charts"');
+  });
+
+  it('chartsOnly skips the cell table', () => {
+    const w = Workbook.createDefault();
+    const sid = w.sheets[0]!.id;
+    w.setCellFromInput(sid, { row: 0, col: 0 }, 'a');
+    w.setCellFromInput(sid, { row: 1, col: 0 }, '5');
+    w.addChart(
+      sid,
+      'column',
+      { start: { row: 0, col: 0 }, end: { row: 1, col: 0 } },
+      { hasHeaderRow: true, hasCategoryColumn: false },
+    );
+    const html = renderSheetToHtml(w, w.getSheet(sid), { chartsOnly: true });
+    expect(html).not.toContain('<table>');
+    expect(html).toContain('<svg');
+  });
+
   it('read-only bundle wraps every sheet in a details block', () => {
     const w = Workbook.createDefault();
     const sid = w.sheets[0]!.id;

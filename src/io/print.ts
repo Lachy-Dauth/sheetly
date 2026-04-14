@@ -10,6 +10,7 @@ import type { Style } from '../engine/styles';
 import type { Cell } from '../engine/cell';
 import { formatValue } from '../grid/format';
 import { DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT } from '../engine/sheet';
+import { renderChartSvg } from '../charts/render';
 
 export interface PrintOptions {
   /** Include row numbers / column letters. */
@@ -19,6 +20,10 @@ export interface PrintOptions {
   /** Restrict the output to this rectangle (inclusive). Defaults to used range. */
   rows?: { start: number; end: number };
   cols?: { start: number; end: number };
+  /** Append the sheet's charts as SVG below the table. Defaults to true. */
+  includeCharts?: boolean;
+  /** Skip the cell table entirely (charts-only export). Defaults to false. */
+  chartsOnly?: boolean;
 }
 
 /** Produce a self-contained HTML string. Safe to open via `window.open`. */
@@ -29,6 +34,8 @@ export function renderSheetToHtml(
 ): string {
   const showHeaders = options.showHeaders ?? false;
   const showTitle = options.showTitle ?? true;
+  const includeCharts = options.includeCharts ?? true;
+  const chartsOnly = options.chartsOnly ?? false;
   const rowRange = options.rows ?? { start: 0, end: Math.max(sheet.maxRow, 0) };
   const colRange = options.cols ?? { start: 0, end: Math.max(sheet.maxCol, 0) };
 
@@ -93,6 +100,24 @@ export function renderSheetToHtml(
     ? `<h1>${escapeHtml(sheet.name)}</h1>`
     : '';
 
+  const tableHtml = chartsOnly
+    ? ''
+    : `<table>
+    <colgroup>${colGroup.join('')}</colgroup>
+    ${headerRow}
+    ${rows.join('\n    ')}
+  </table>`;
+
+  let chartsHtml = '';
+  if (includeCharts && sheet.charts.length > 0) {
+    const items = sheet.charts.map((chart) => {
+      const svg = renderChartSvg(chart, workbook);
+      const caption = chart.options.title ? `<figcaption>${escapeHtml(chart.options.title)}</figcaption>` : '';
+      return `<figure class="chart">${svg}${caption}</figure>`;
+    });
+    chartsHtml = `<section class="charts"><h2>Charts</h2>${items.join('\n')}</section>`;
+  }
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -101,9 +126,13 @@ export function renderSheetToHtml(
 <style>
   body { font: 12px -apple-system, system-ui, sans-serif; margin: 24px; color: #111; }
   h1 { font-size: 20px; margin: 0 0 12px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
   table { border-collapse: collapse; width: auto; }
   td, th { border: 1px solid #888; padding: 2px 6px; vertical-align: middle; }
   th.rh, th.ch { background: #f1f1f1; font-weight: 600; text-align: center; }
+  section.charts { margin-top: 16px; }
+  figure.chart { margin: 0 0 16px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; display: inline-block; page-break-inside: avoid; }
+  figure.chart figcaption { font-size: 11px; color: #555; margin-top: 4px; text-align: center; }
   @media print {
     body { margin: 0; }
     @page { margin: 12mm; }
@@ -112,11 +141,8 @@ export function renderSheetToHtml(
 </head>
 <body>
   ${title}
-  <table>
-    <colgroup>${colGroup.join('')}</colgroup>
-    ${headerRow}
-    ${rows.join('\n    ')}
-  </table>
+  ${tableHtml}
+  ${chartsHtml}
 </body>
 </html>`;
 }
@@ -142,6 +168,32 @@ export function printSheet(workbook: Workbook, sheet: Sheet, options?: PrintOpti
   }
   // Revoke later so the new window has time to load the URL.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/** Download every chart on the sheet as a standalone .svg file. */
+export function downloadSheetCharts(workbook: Workbook, sheet: Sheet): void {
+  if (typeof document === 'undefined') return;
+  if (sheet.charts.length === 0) return;
+  for (let i = 0; i < sheet.charts.length; i++) {
+    const chart = sheet.charts[i]!;
+    const svg = renderChartSvg(chart, workbook);
+    const filename = sanitizeFilename(
+      chart.options.title ?? `${sheet.name}-chart-${i + 1}`,
+    );
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.svg`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+}
+
+function sanitizeFilename(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 80) || 'chart';
 }
 
 function resolveStyle(workbook: Workbook, cell: Cell | undefined): Style {
