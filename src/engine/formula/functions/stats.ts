@@ -201,7 +201,46 @@ export function installStats(): void {
     if (typeof slope !== 'number' || typeof intercept !== 'number') return makeError('#N/A');
     return intercept + slope * x;
   });
-  register('TREND', (args) => regression([args[0]!, args[1]!], 'slope'));
+  register('TREND', (args) => {
+    // TREND(known_y, [known_x], [new_x], [const])
+    // Returns predicted y for new_x using a simple linear fit. Defaults:
+    // known_x = 1..N, new_x = known_x.
+    const ys = flattenNumbers([args[0] ?? null]).nums;
+    if (ys.length < 2) return makeError('#REF!');
+    const xs =
+      args.length > 1 && args[1] !== null && args[1] !== undefined
+        ? flattenNumbers([args[1]!]).nums
+        : ys.map((_v, i) => i + 1);
+    if (xs.length !== ys.length) return makeError('#REF!');
+    const n = ys.length;
+    const mx = xs.reduce((a, b) => a + b, 0) / n;
+    const my = ys.reduce((a, b) => a + b, 0) / n;
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < n; i++) {
+      num += (xs[i]! - mx) * (ys[i]! - my);
+      den += (xs[i]! - mx) ** 2;
+    }
+    if (den === 0) return makeError('#DIV/0!');
+    const slope = num / den;
+    const intercept = my - slope * mx;
+    const predict = (x: number) => intercept + slope * x;
+    if (args.length > 2 && args[2] !== null && args[2] !== undefined) {
+      const newX = args[2]!;
+      if (Array.isArray(newX)) {
+        return newX.map((row) =>
+          row.map((v) => {
+            const num = typeof v === 'number' ? v : Number(v);
+            return Number.isFinite(num) ? predict(num) : null;
+          }),
+        );
+      }
+      const v = asNumber(newX);
+      if (typeof v !== 'number') return v;
+      return predict(v);
+    }
+    return predict(xs[0]!);
+  });
 }
 
 function stdev(args: any[], sample: boolean) {

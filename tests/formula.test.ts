@@ -270,6 +270,34 @@ describe('formula: error in name', () => {
   });
 });
 
+describe('formula: stats', () => {
+  it('TREND predicts y for new_x using linear fit', () => {
+    const { w, s } = wb();
+    // Perfect line: y = 2x + 1 → for x=1..4, y=3,5,7,9.
+    [3, 5, 7, 9].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, String(v)));
+    [1, 2, 3, 4].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 1 }, String(v)));
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=TREND(A1:A4,B1:B4,5)');
+    expect(s.getCell({ row: 0, col: 3 })?.computed).toBeCloseTo(11, 6);
+  });
+});
+
+describe('formula: lookup XLOOKUP modes', () => {
+  it('XLOOKUP returns if_not_found for missing key', () => {
+    const { w, s } = wb();
+    ['a', 'b', 'c'].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, v));
+    [1, 2, 3].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 1 }, String(v)));
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=XLOOKUP("z",A1:A3,B1:B3,"missing")');
+    expect(s.getCell({ row: 0, col: 3 })?.computed).toBe('missing');
+  });
+  it('XLOOKUP with wildcard mode (2)', () => {
+    const { w, s } = wb();
+    ['apple', 'banana', 'cherry'].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 0 }, v));
+    [1, 2, 3].forEach((v, r) => w.setCellFromInput(s.id, { row: r, col: 1 }, String(v)));
+    w.setCellFromInput(s.id, { row: 0, col: 3 }, '=XLOOKUP("ban*",A1:A3,B1:B3,"x",2)');
+    expect(s.getCell({ row: 0, col: 3 })?.computed).toBe(2);
+  });
+});
+
 describe('formula: datetime', () => {
   it('WEEKNUM honours mode (Sun vs Mon start)', () => {
     // 2024-01-01 is a Monday.

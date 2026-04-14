@@ -169,12 +169,39 @@ export function installLookup(): void {
     const lookupArr = asArray(args[1] ?? null);
     const returnArr = asArray(args[2] ?? null);
     const ifNotFound = args.length > 3 ? args[3]! : makeError('#N/A');
+    const matchMode = args.length > 4 ? asNumber(args[4]!) : 0;
+    const searchMode = args.length > 5 ? asNumber(args[5]!) : 1;
+    if (typeof matchMode !== 'number') return matchMode;
+    if (typeof searchMode !== 'number') return searchMode;
     if (!lookupArr || !returnArr) return makeError('#N/A');
     const flatL = lookupArr.flat();
-    for (let i = 0; i < flatL.length; i++) {
-      if (compareEq(flatL[i] ?? null, key)) return returnArr.flat()[i] ?? null;
+    const flatR = returnArr.flat();
+    const indices: number[] = [];
+    for (let i = 0; i < flatL.length; i++) indices.push(i);
+    if (searchMode < 0) indices.reverse();
+    const wildcardRe = matchMode === 2 ? wildcardToRegex(asText(key)) : null;
+    let bestIdx = -1;
+    let bestVal: Scalar = null;
+    for (const i of indices) {
+      const v = flatL[i] ?? null;
+      if (wildcardRe) {
+        if (wildcardRe.test(asText(v))) return flatR[i] ?? null;
+        continue;
+      }
+      if (compareEq(v, key)) return flatR[i] ?? null;
+      if (matchMode === -1) {
+        if (lt(v, key) && (bestIdx < 0 || lt(bestVal, v))) {
+          bestIdx = i;
+          bestVal = v;
+        }
+      } else if (matchMode === 1) {
+        if (gt(v, key) && (bestIdx < 0 || gt(bestVal, v))) {
+          bestIdx = i;
+          bestVal = v;
+        }
+      }
     }
-    return ifNotFound;
+    return bestIdx >= 0 ? flatR[bestIdx] ?? null : ifNotFound;
   });
 
   register('OFFSET', (_args) => makeError('#N/A', 'OFFSET needs dynamic refs'));
