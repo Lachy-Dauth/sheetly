@@ -14,6 +14,7 @@ import { cellKey } from '../engine/address';
 import { formatValue } from './format';
 import type { DrawCtx } from './theme';
 import { HEADER_H, HEADER_W } from './layout';
+import { drawSparkline } from './draw-sparklines';
 
 interface CellBox {
   row: number;
@@ -64,10 +65,14 @@ export function drawCells(d: DrawCtx): void {
     }
   }
 
-  // Layer 3: text
+  // Layer 3: text (sparklines replace the text layer for their cell)
   ctx.textBaseline = 'middle';
   for (const b of boxes) {
     if (!b.cell) continue;
+    if (b.cell.sparkline) {
+      drawSparkline(ctx, { x: b.x, y: b.y, w: b.w, h: b.h }, b.cell.sparkline, workbook, sheet.id);
+      continue;
+    }
     drawCellText(d, b);
   }
 

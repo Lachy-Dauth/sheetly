@@ -8,6 +8,7 @@ import { sortRange, dedupeRange, textToColumns } from '../engine/data-ops';
 import { BorderMenu } from './BorderMenu';
 import { ConditionalMenu } from './ConditionalMenu';
 import { DataMenu } from './DataMenu';
+import { ChartMenu } from './ChartMenu';
 import type { ThemeId } from '../grid/theme';
 
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
   painterActive: boolean;
   onImport: () => void;
   onFind: () => void;
+  onToggleCharts: () => void;
 }
 
 export function Toolbar(props: Props) {
@@ -35,6 +37,7 @@ export function Toolbar(props: Props) {
     painterActive,
     onImport,
     onFind,
+    onToggleCharts,
   } = props;
 
   const activeRange = selectionRange ?? { start: selection, end: selection };
@@ -233,6 +236,15 @@ export function Toolbar(props: Props) {
           Table
         </button>
         <ConditionalMenu workbook={workbook} sheet={sheet} range={activeRange} />
+        <ChartMenu
+          workbook={workbook}
+          sheet={sheet}
+          range={activeRange}
+          selection={selection}
+        />
+        <button onClick={onToggleCharts} title="Open charts panel">
+          📊
+        </button>
         <DataMenu
           workbook={workbook}
           sheet={sheet}

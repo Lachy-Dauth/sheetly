@@ -62,6 +62,8 @@ export interface Cell {
   comment?: string;
   /** Data validation id. */
   validationId?: number;
+  /** Inline sparkline config (line, column, winloss). */
+  sparkline?: import('./charts').Sparkline;
 }
 
 export function isFormula(raw: Cell['raw']): raw is string {

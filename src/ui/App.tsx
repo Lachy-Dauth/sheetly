@@ -5,6 +5,7 @@ import { Toolbar } from './Toolbar';
 import { FormulaBar } from './FormulaBar';
 import { SheetTabs } from './SheetTabs';
 import { FindReplace } from './FindReplace';
+import { ChartsPanel } from './ChartsPanel';
 import { importCsv } from '../io/csv';
 import type { Address, RangeAddress } from '../engine/address';
 import type { ThemeId } from '../grid/theme';
@@ -20,6 +21,7 @@ export function App() {
   const [themeId, setThemeId] = useState<ThemeId>('light');
   const [paintStyleId, setPaintStyleId] = useState<number | null>(null);
   const [findOpen, setFindOpen] = useState(false);
+  const [chartsOpen, setChartsOpen] = useState(false);
   const [, forceRender] = useState(0);
   const rerender = () => forceRender((n) => n + 1);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,6 +65,7 @@ export function App() {
         onStartPainter={setPaintStyleId}
         onImport={() => fileRef.current?.click()}
         onFind={() => setFindOpen(true)}
+        onToggleCharts={() => setChartsOpen((v) => !v)}
       />
       <FormulaBar workbook={workbook} sheet={sheet} selection={selection} />
       <Grid
@@ -93,6 +96,9 @@ export function App() {
         }}
       />
       {findOpen ? <FindReplace workbook={workbook} sheet={sheet} onClose={() => setFindOpen(false)} /> : null}
+      {chartsOpen ? (
+        <ChartsPanel workbook={workbook} sheet={sheet} onClose={() => setChartsOpen(false)} />
+      ) : null}
     </div>
   );
 }

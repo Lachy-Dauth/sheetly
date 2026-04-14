@@ -8,6 +8,7 @@ import type { Cell } from './cell';
 import type { Table } from './tables';
 import type { ConditionalRule } from './conditional';
 import type { Validation } from './validation';
+import type { Chart } from './charts';
 
 export type CommandKind =
   | 'setCell'
@@ -35,6 +36,9 @@ export type CommandKind =
   | 'updateCfRule'
   | 'addValidation'
   | 'removeValidation'
+  | 'addChart'
+  | 'removeChart'
+  | 'updateChart'
   | 'composite';
 
 export interface SetCellCmd {
@@ -208,6 +212,26 @@ export interface RemoveValidationCmd {
   index?: number;
 }
 
+export interface AddChartCmd {
+  kind: 'addChart';
+  chart: Chart;
+}
+
+export interface RemoveChartCmd {
+  kind: 'removeChart';
+  sheetId: string;
+  chartId: string;
+  snapshot?: Chart;
+  index?: number;
+}
+
+export interface UpdateChartCmd {
+  kind: 'updateChart';
+  chartId: string;
+  patch: Partial<Chart>;
+  prev?: Partial<Chart>;
+}
+
 export interface CompositeCmd {
   kind: 'composite';
   label: string;
@@ -239,4 +263,7 @@ export type Command =
   | UpdateCfRuleCmd
   | AddValidationCmd
   | RemoveValidationCmd
+  | AddChartCmd
+  | RemoveChartCmd
+  | UpdateChartCmd
   | CompositeCmd;

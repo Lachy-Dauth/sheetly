@@ -18,6 +18,8 @@ import type { ConditionalRule, NewRule } from './conditional';
 import { makeRuleId } from './conditional';
 import type { Validation, ValidationRule, ValidationResult } from './validation';
 import { makeValidationId, validateCellInput } from './validation';
+import type { Chart, ChartType, Sparkline } from './charts';
+import { makeChart } from './charts';
 
 export interface NamedRange {
   name: string;
@@ -300,6 +302,52 @@ export class Workbook {
     this.apply({ kind: 'removeValidation', sheetId, validationId });
   }
 
+  addChart(
+    sheetId: string,
+    type: ChartType,
+    range: RangeAddress,
+    opts: Partial<Omit<Chart, 'id' | 'sheetId' | 'type' | 'range'>> = {},
+  ): Chart {
+    const chart = makeChart({
+      sheetId,
+      type,
+      range,
+      hasHeaderRow: opts.hasHeaderRow,
+      hasCategoryColumn: opts.hasCategoryColumn,
+      series: opts.series,
+      options: opts.options,
+      anchor: opts.anchor,
+    });
+    this.apply({ kind: 'addChart', chart });
+    return chart;
+  }
+
+  removeChart(sheetId: string, chartId: string): void {
+    this.apply({ kind: 'removeChart', sheetId, chartId });
+  }
+
+  updateChart(chartId: string, patch: Partial<Chart>): void {
+    this.apply({ kind: 'updateChart', chartId, patch });
+  }
+
+  findChart(chartId: string): { sheet: Sheet; chart: Chart } | undefined {
+    for (const s of this.sheets) {
+      const c = s.charts.find((c) => c.id === chartId);
+      if (c) return { sheet: s, chart: c };
+    }
+    return undefined;
+  }
+
+  /** Write a sparkline onto a cell via a standard setCell command. */
+  setSparkline(sheetId: string, address: Address, sparkline: Sparkline | undefined): void {
+    const sheet = this.getSheet(sheetId);
+    const prev = sheet.getCell(address);
+    const base: Cell = prev ? { ...prev } : { raw: null };
+    if (sparkline) base.sparkline = sparkline;
+    else delete base.sparkline;
+    this.apply({ kind: 'setCell', sheetId, address, next: base, prev });
+  }
+
   addSheet(name?: string): Sheet {
     const n = name ?? this.uniqueSheetName();
     const cmd = this.apply({ kind: 'addSheet', name: n });
@@ -447,6 +495,29 @@ export class Workbook {
         const [snapshot] = sheet.validations.splice(index, 1);
         return { ...cmd, snapshot, index };
       }
+      case 'addChart': {
+        const sheet = this.getSheet(cmd.chart.sheetId);
+        sheet.charts.push(cmd.chart);
+        return cmd;
+      }
+      case 'removeChart': {
+        const sheet = this.getSheet(cmd.sheetId);
+        const index = sheet.charts.findIndex((c) => c.id === cmd.chartId);
+        if (index < 0) return cmd;
+        const [snapshot] = sheet.charts.splice(index, 1);
+        return { ...cmd, snapshot, index };
+      }
+      case 'updateChart': {
+        const found = this.findChart(cmd.chartId);
+        if (!found) return cmd;
+        const prev: Partial<Chart> = {};
+        const cc = found.chart as unknown as Record<string, unknown>;
+        for (const k of Object.keys(cmd.patch) as (keyof Chart)[]) {
+          (prev as Record<string, unknown>)[k] = cc[k];
+          cc[k] = (cmd.patch as Record<string, unknown>)[k];
+        }
+        return { ...cmd, prev };
+      }
       case 'composite': {
         const children = cmd.children.map((c) => this.execute(c));
         return { ...cmd, children };
@@ -545,6 +616,14 @@ export class Workbook {
         return cmd.snapshot
           ? { kind: 'addValidation', sheetId: cmd.sheetId, validation: cmd.snapshot }
           : { kind: 'composite', label: 'no-op', children: [] };
+      case 'addChart':
+        return { kind: 'removeChart', sheetId: cmd.chart.sheetId, chartId: cmd.chart.id };
+      case 'removeChart':
+        return cmd.snapshot
+          ? { kind: 'addChart', chart: cmd.snapshot }
+          : { kind: 'composite', label: 'no-op', children: [] };
+      case 'updateChart':
+        return { kind: 'updateChart', chartId: cmd.chartId, patch: cmd.prev ?? {} };
       case 'composite':
         return {
           kind: 'composite',

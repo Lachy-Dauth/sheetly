@@ -7,6 +7,7 @@ import { cellKey, fromCellKey, normalizeRange } from './address';
 import type { Cell } from './cell';
 import type { ConditionalRule } from './conditional';
 import type { Validation } from './validation';
+import type { Chart } from './charts';
 
 export const DEFAULT_COL_WIDTH = 96;
 export const DEFAULT_ROW_HEIGHT = 22;
@@ -46,6 +47,7 @@ export class Sheet {
   merges: MergedRange[] = [];
   conditionalRules: ConditionalRule[] = [];
   validations: Validation[] = [];
+  charts: Chart[] = [];
   /** Approx max used row/col, for navigation limits. */
   maxRow = 0;
   maxCol = 0;
@@ -71,7 +73,8 @@ export class Sheet {
         cell.styleId === undefined &&
         cell.format === undefined &&
         cell.comment === undefined &&
-        cell.validationId === undefined);
+        cell.validationId === undefined &&
+        cell.sparkline === undefined);
     if (isEmpty) {
       this.cells.delete(key);
     } else {

@@ -269,3 +269,79 @@ body,
 .dropdown-menu button:hover {
   background: var(--accent-bg);
 }
+
+.dropdown-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  padding: 4px 10px 2px;
+  color: var(--muted, #666);
+}
+
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--bg);
+  color: var(--fg);
+  border-left: 1px solid var(--border);
+  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.08);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+.side-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-panel-body {
+  padding: 12px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chart-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.chart-list button.active {
+  background: var(--accent-bg);
+}
+
+.chart-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chart-preview {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.chart-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.muted {
+  color: var(--muted, #666);
+  font-size: 13px;
+}
