@@ -150,6 +150,32 @@ export class Workbook {
     this.apply({ kind: 'setName', name, ref, prev });
   }
 
+  /** Merge a range, unmerging any existing merges it touches first. */
+  mergeRange(sheetId: string, range: RangeAddress): void {
+    const sheet = this.getSheet(sheetId);
+    const touched = sheet.merges.filter((m) =>
+      !(
+        m.range.end.row < range.start.row ||
+        m.range.start.row > range.end.row ||
+        m.range.end.col < range.start.col ||
+        m.range.start.col > range.end.col
+      ),
+    );
+    this.batch(() => {
+      for (const m of touched) {
+        this.apply({ kind: 'unmerge', sheetId, mergeId: m.id, range: m.range });
+      }
+      this.apply({ kind: 'merge', sheetId, range });
+    });
+  }
+
+  unmergeAt(sheetId: string, a: Address): void {
+    const sheet = this.getSheet(sheetId);
+    const merge = sheet.findMergeAt(a);
+    if (!merge) return;
+    this.apply({ kind: 'unmerge', sheetId, mergeId: merge.id, range: merge.range });
+  }
+
   addSheet(name?: string): Sheet {
     const n = name ?? this.uniqueSheetName();
     const cmd = this.apply({ kind: 'addSheet', name: n });

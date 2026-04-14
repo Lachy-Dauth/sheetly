@@ -2,22 +2,63 @@ import type { Workbook } from '../engine/workbook';
 import type { Sheet } from '../engine/sheet';
 import type { Address } from '../engine/address';
 import type { Style } from '../engine/styles';
+import { NUMBER_FORMATS } from '../engine/number-formats';
+import { primaryRange } from '../grid/selection';
+import { BorderMenu } from './BorderMenu';
+import type { ThemeId } from '../grid/theme';
 
 interface Props {
   workbook: Workbook;
   sheet: Sheet;
   selection: Address;
+  selectionRange?: { start: Address; end: Address };
+  themeId: ThemeId;
+  onThemeChange: (t: ThemeId) => void;
+  onStartPainter: (styleId: number) => void;
+  painterActive: boolean;
   onImport: () => void;
 }
 
-export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
+export function Toolbar(props: Props) {
+  const {
+    workbook,
+    sheet,
+    selection,
+    selectionRange,
+    themeId,
+    onThemeChange,
+    onStartPainter,
+    painterActive,
+    onImport,
+  } = props;
+
+  const activeRange = selectionRange ?? { start: selection, end: selection };
   const apply = (patch: Partial<Style>) => {
-    workbook.setStyle(sheet.id, { start: selection, end: selection }, patch);
+    workbook.setStyle(sheet.id, activeRange, patch);
   };
 
   const currentCell = sheet.getCell(selection);
-  const currentStyle =
+  const currentStyle: Style =
     currentCell?.styleId !== undefined ? workbook.styles.get(currentCell.styleId) : {};
+
+  const hasMergeAtActive = !!sheet.findMergeAt(selection);
+
+  const toggleMerge = () => {
+    if (hasMergeAtActive) {
+      workbook.unmergeAt(sheet.id, selection);
+    } else {
+      const r = primaryRange({
+        active: selection,
+        primary: { anchor: activeRange.start, end: activeRange.end },
+        extras: [],
+      });
+      workbook.mergeRange(sheet.id, r);
+    }
+  };
+
+  const startPainter = () => {
+    if (currentCell?.styleId !== undefined) onStartPainter(currentCell.styleId);
+  };
 
   return (
     <div className="toolbar" role="toolbar">
@@ -51,6 +92,18 @@ export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
         </button>
       </div>
       <div className="group">
+        <select
+          value={currentStyle.fontSize ?? 12}
+          onChange={(e) => apply({ fontSize: Number(e.target.value) })}
+          title="Font size"
+          style={{ width: 54 }}
+        >
+          {[9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 48].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
         <button
           className={currentStyle.bold ? 'active' : ''}
           onClick={() => apply({ bold: !currentStyle.bold })}
@@ -72,25 +125,65 @@ export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
         >
           <u>U</u>
         </button>
+        <button
+          className={currentStyle.strike ? 'active' : ''}
+          onClick={() => apply({ strike: !currentStyle.strike })}
+          title="Strikethrough"
+        >
+          <s>S</s>
+        </button>
       </div>
       <div className="group">
         <button
           className={currentStyle.align === 'left' ? 'active' : ''}
           onClick={() => apply({ align: 'left' })}
+          title="Align left"
         >
           ⟵
         </button>
         <button
           className={currentStyle.align === 'center' ? 'active' : ''}
           onClick={() => apply({ align: 'center' })}
+          title="Center"
         >
           ↔
         </button>
         <button
           className={currentStyle.align === 'right' ? 'active' : ''}
           onClick={() => apply({ align: 'right' })}
+          title="Align right"
         >
           ⟶
+        </button>
+      </div>
+      <div className="group">
+        <button
+          className={currentStyle.valign === 'top' ? 'active' : ''}
+          onClick={() => apply({ valign: 'top' })}
+          title="Align top"
+        >
+          ⤒
+        </button>
+        <button
+          className={currentStyle.valign === 'middle' ? 'active' : ''}
+          onClick={() => apply({ valign: 'middle' })}
+          title="Align middle"
+        >
+          ≡
+        </button>
+        <button
+          className={currentStyle.valign === 'bottom' ? 'active' : ''}
+          onClick={() => apply({ valign: 'bottom' })}
+          title="Align bottom"
+        >
+          ⤓
+        </button>
+        <button
+          className={currentStyle.wrap ? 'active' : ''}
+          onClick={() => apply({ wrap: !currentStyle.wrap })}
+          title="Wrap text"
+        >
+          ↵
         </button>
       </div>
       <div className="group">
@@ -110,6 +203,44 @@ export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
             onChange={(e) => apply({ color: e.target.value })}
           />
         </label>
+      </div>
+      <div className="group">
+        <BorderMenu onApply={apply} />
+        <button onClick={toggleMerge} title={hasMergeAtActive ? 'Unmerge' : 'Merge'}>
+          {hasMergeAtActive ? '⇤⇥' : '⇥⇤'}
+        </button>
+        <button
+          className={painterActive ? 'active' : ''}
+          onClick={startPainter}
+          title="Format painter"
+          disabled={currentCell?.styleId === undefined}
+        >
+          🖌
+        </button>
+      </div>
+      <div className="group">
+        <select
+          value={currentStyle.format ?? 'General'}
+          onChange={(e) => apply({ format: e.target.value })}
+          title="Number format"
+        >
+          {NUMBER_FORMATS.map((f) => (
+            <option key={f.value} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="group">
+        <select
+          value={themeId}
+          onChange={(e) => onThemeChange(e.target.value as ThemeId)}
+          title="Theme"
+        >
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="high-contrast">High contrast</option>
+        </select>
       </div>
     </div>
   );

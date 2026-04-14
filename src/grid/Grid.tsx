@@ -9,6 +9,9 @@ import type { Sheet } from '../engine/sheet';
 import type { Address } from '../engine/address';
 import { isFormula } from '../engine/cell';
 import { drawGrid, cellRect } from './draw';
+import { measureColumnWidth } from './draw-cells';
+import type { ThemeId } from './theme';
+import { THEMES } from './theme';
 import {
   HEADER_H,
   HEADER_W,
@@ -29,12 +32,24 @@ interface Props {
   selection: Address; // legacy prop: active cell
   onSelectionChange: (a: Address) => void;
   onDropFiles: (files: File[]) => void;
+  themeId?: ThemeId;
+  /** If set, next click applies this styleId to the target (format painter). */
+  paintStyleId?: number | null;
+  onPaintComplete?: () => void;
 }
 
 type DragMode = null | 'select' | 'resize-col' | 'resize-row';
 
 export function Grid(props: Props) {
-  const { workbook, sheet, onSelectionChange, onDropFiles } = props;
+  const {
+    workbook,
+    sheet,
+    onSelectionChange,
+    onDropFiles,
+    themeId = 'light',
+    paintStyleId,
+    onPaintComplete,
+  } = props;
   const outerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [viewport, setViewport] = useState({ width: 800, height: 600 });
@@ -74,8 +89,17 @@ export function Grid(props: Props) {
     const ctx = canvas.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const visible = computeVisible(sheet, { ...viewport, scrollX: scroll.x, scrollY: scroll.y });
-    drawGrid({ ctx, workbook, sheet, viewport: { ...viewport, scrollX: scroll.x, scrollY: scroll.y }, visible, selection: sel, dpr });
-  }, [workbook, sheet, viewport, scroll.x, scroll.y, sel]);
+    drawGrid({
+      ctx,
+      workbook,
+      sheet,
+      viewport: { ...viewport, scrollX: scroll.x, scrollY: scroll.y },
+      visible,
+      selection: sel,
+      theme: THEMES[themeId],
+      dpr,
+    });
+  }, [workbook, sheet, viewport, scroll.x, scroll.y, sel, themeId]);
 
   useLayoutEffect(() => {
     draw();
@@ -120,6 +144,13 @@ export function Grid(props: Props) {
 
   // --- mouse -----------------------------------------------------------
 
+  const applyPaint = (range: { start: Address; end: Address }) => {
+    if (paintStyleId == null) return;
+    const style = workbook.styles.get(paintStyleId);
+    workbook.setStyle(sheet.id, range, style);
+    onPaintComplete?.();
+  };
+
   const onMouseDown = (e: React.MouseEvent) => {
     const hit = hitTest(e.clientX, e.clientY);
     if (hit.zone === 'col-header' && hit.onHandle) {
@@ -135,6 +166,7 @@ export function Grid(props: Props) {
       const bottom = { row: sheet.rowCount - 1, col: hit.col };
       setSel({ active: top, primary: { anchor: top, end: bottom }, extras: [] });
       dragRef.current = { mode: 'select' };
+      if (paintStyleId != null) applyPaint({ start: top, end: bottom });
       return;
     }
     if (hit.zone === 'row-header') {
@@ -142,6 +174,7 @@ export function Grid(props: Props) {
       const right = { row: hit.row, col: sheet.colCount - 1 };
       setSel({ active: left, primary: { anchor: left, end: right }, extras: [] });
       dragRef.current = { mode: 'select' };
+      if (paintStyleId != null) applyPaint({ start: left, end: right });
       return;
     }
     if (hit.zone === 'cell') {
@@ -176,11 +209,13 @@ export function Grid(props: Props) {
         setSel((prev) => extendTo(prev, { row: hit.row, col: hit.col }));
       }
     } else {
-      // Cursor feedback for resize handles.
+      // Cursor feedback
       const hit = hitTest(e.clientX, e.clientY);
       const canvas = canvasRef.current!;
       if ((hit.zone === 'col-header' && hit.onHandle) || (hit.zone === 'row-header' && hit.onHandle)) {
         canvas.style.cursor = hit.zone === 'col-header' ? 'col-resize' : 'row-resize';
+      } else if (paintStyleId != null) {
+        canvas.style.cursor = 'copy';
       } else {
         canvas.style.cursor = 'cell';
       }
@@ -212,11 +247,23 @@ export function Grid(props: Props) {
         height: Math.max(8, base),
       });
     }
+    if (drag.mode === 'select' && paintStyleId != null) {
+      applyPaint(primaryRange(sel));
+    }
     dragRef.current = { mode: null };
   };
 
   const onDblClick = (e: React.MouseEvent) => {
     const hit = hitTest(e.clientX, e.clientY);
+    if (hit.zone === 'col-header' && hit.onHandle) {
+      // Autofit the column whose right edge was double-clicked.
+      const ctx = canvasRef.current?.getContext('2d');
+      if (ctx) {
+        const width = measureColumnWidth(sheet, workbook, hit.col, ctx);
+        workbook.apply({ kind: 'resizeCol', sheetId: sheet.id, col: hit.col, width });
+      }
+      return;
+    }
     if (hit.zone === 'cell') openEditor({ row: hit.row, col: hit.col });
   };
 
@@ -293,6 +340,10 @@ export function Grid(props: Props) {
         break;
       case 'Tab':
         moveSel(0, e.shiftKey ? -1 : 1, false);
+        e.preventDefault();
+        break;
+      case 'Escape':
+        if (paintStyleId != null) onPaintComplete?.();
         e.preventDefault();
         break;
       case 'F2':

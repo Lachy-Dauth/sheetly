@@ -6,16 +6,24 @@ import { FormulaBar } from './FormulaBar';
 import { SheetTabs } from './SheetTabs';
 import { importCsv } from '../io/csv';
 import type { Address } from '../engine/address';
+import type { ThemeId } from '../grid/theme';
 
 export function App() {
   const workbook = useMemo(() => Workbook.createDefault(), []);
   const [activeSheetId, setActiveSheetId] = useState(workbook.sheets[0]!.id);
   const [selection, setSelection] = useState<Address>({ row: 0, col: 0 });
+  const [themeId, setThemeId] = useState<ThemeId>('light');
+  const [paintStyleId, setPaintStyleId] = useState<number | null>(null);
   const [, forceRender] = useState(0);
   const rerender = () => forceRender((n) => n + 1);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => workbook.subscribe(rerender), [workbook]);
+
+  // Reflect the theme on <html> so CSS variables can follow.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', themeId);
+  }, [themeId]);
 
   const sheet = workbook.getSheet(activeSheetId);
 
@@ -30,6 +38,10 @@ export function App() {
         workbook={workbook}
         sheet={sheet}
         selection={selection}
+        themeId={themeId}
+        onThemeChange={setThemeId}
+        painterActive={paintStyleId !== null}
+        onStartPainter={setPaintStyleId}
         onImport={() => fileRef.current?.click()}
       />
       <FormulaBar workbook={workbook} sheet={sheet} selection={selection} />
@@ -39,6 +51,9 @@ export function App() {
         selection={selection}
         onSelectionChange={setSelection}
         onDropFiles={(files) => files[0] && onFile(files[0])}
+        themeId={themeId}
+        paintStyleId={paintStyleId}
+        onPaintComplete={() => setPaintStyleId(null)}
       />
       <SheetTabs
         workbook={workbook}
