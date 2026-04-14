@@ -30,7 +30,7 @@ export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
         </button>
       </div>
       <div className="group">
-        <button onClick={onImport} title="Import CSV">
+        <button onClick={onImport} title="Import CSV / TSV">
           Import
         </button>
         <button
@@ -39,7 +39,15 @@ export function Toolbar({ workbook, sheet, selection, onImport }: Props) {
           }}
           title="Export active sheet as CSV"
         >
-          Export
+          CSV
+        </button>
+        <button
+          onClick={() => {
+            import('../io/csv').then((m) => m.exportWorkbookJson(workbook));
+          }}
+          title="Export workbook as JSON"
+        >
+          JSON
         </button>
       </div>
       <div className="group">
